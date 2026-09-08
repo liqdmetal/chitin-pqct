@@ -8,8 +8,8 @@ Full response/transcript tuples live in an astronomically large space, so
 exact-tuple TV=1 is expected regardless of whether the underlying honest and
 simulator laws actually match (a birthday-bound artifact, not evidence of a
 real mismatch). To get a genuine signal we compare per-coefficient marginals
-of accepted `g` and `z_g` values (small bounded integer support, real
-collisions occur).
+of accepted `g`, `z_g`, and `z_b,i` (per-index, pre-aggregation) values
+(small bounded integer support, real collisions occur).
 
 Measured (512 samples, toy fixture, honest 22.66% acceptance):
 
@@ -17,16 +17,27 @@ Measured (512 samples, toy fixture, honest 22.66% acceptance):
 g:  honest mean=-0.0506 var=7.78 (n=928)
     sim    mean=-0.0073 var=7.74 (n=4096)
     exact TV = 0.052
-z_g: honest mean=0.138 var=24.33 (n=928)
-     sim    mean=0.091 var=23.60 (n=4096)
+z_g: honest mean=0.138  var=24.33 (n=928)
+     sim    mean=0.091  var=23.60 (n=4096)
      exact TV = 0.075
 ```
 
-Variances match closely (calibration is roughly right). TV is small (0.05-0.08),
-not the ≈1 from full-tuple comparison. Means differ somewhat; this may be
-finite-sample noise (honest n=928 vs sim n=4096) or a real bias term from
-`g = x*b + t` mixing with bit values `b in {0,1}`, absent in the surrogate.
-Not yet resolved — flagged, not fixed by tuning.
+zb,i (per-index, pre-aggregation) added later:
+
+```text
+zb,i: honest mean=0.308  var=22.73 (n=928)
+      sim    mean=0.013  var=23.36 (n=4096)
+      exact TV = 0.065
+```
+
+Variances match closely across all three quantities (calibration is roughly
+right). TV stays small (0.05-0.08) for all three, not the ≈1 from full-tuple
+comparison. Means differ somewhat on all three, largest gap on `z_b,i`
+(0.308 vs 0.013); this may be finite-sample noise (honest n=928 vs sim
+n=4096) or a real bias term the surrogate does not model (e.g. `g = x*b + t`
+mixing with bit values `b in {0,1}`, or `z_b,i = x*r_b,i + r_t,i` mixing
+with the actual opening randomness `r_b,i` rather than an independent
+symmetric draw). Not yet resolved — flagged, not fixed by tuning.
 
 Gao Protocol 1 Step 10 rejects the pre-aggregation tuple
 

@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 138 tests pass.
+- 139 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -17,7 +17,9 @@
   Step 8/10 rejection tuples independently.
 - `pqct.shvzk_empirical_stats.marginal_integer_stats` corrects the
   full-tuple TV=1 birthday-bound artifact: per-coefficient marginal
-  TV is 0.05-0.08 (see docs/SHVZK_COMPARISON.md), not ~1.
+  TV is 0.05-0.08 for all three of `g`, `z_g`, `z_b,i` (see
+  docs/SHVZK_COMPARISON.md), not ~1. Removed dead placeholder code
+  (`_sample_protocol_rejection`) that always raised.
 - `pqct.hmc_binding_reduction` mechanically derives a literal M-SIS
   solution from a real HMC collision and checks Gao Equation (2).
 - `pqct.lattice_estimate` chains Eq.(2) -> BKZ blocksize -> core-SVP
@@ -35,7 +37,9 @@
   case -- only collision-to-SIS and Eq.(2) are implemented.
 - Extraction of the binary witness from all three transcripts.
 - SHVZK simulator distribution comparison with exact per-index
-  rejection components (simulator still lacks that decomposition).
+  rejection GATE components (the simulator now returns per-index
+  `z_b,i` values and their marginal is compared, but it still has
+  no Rej()-style acceptance/rejection stage to gate them through).
 - Fiat-Shamir proof in the quantum random-oracle setting.
 - Verified (not self-built) Module-SIS/Module-LWE estimate via the
   real `lattice-estimator` tool.

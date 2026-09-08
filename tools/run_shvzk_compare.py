@@ -79,6 +79,7 @@ def main() -> None:
         "conditioned_transcript_tv": str(result.conditioned_transcript_tv),
         "marginal_g": _marginal_dict(result.marginal_g_stats),
         "marginal_zg": _marginal_dict(result.marginal_zg_stats),
+        "marginal_zb": _marginal_dict(result.marginal_zb_stats),
     }, indent=2))
 
 

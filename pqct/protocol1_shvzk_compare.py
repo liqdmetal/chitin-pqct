@@ -158,6 +158,7 @@ class FixedChallengeComparison:
     simulator_mean_log_acceptance: Decimal | None = None
     marginal_g_stats: "MarginalIntegerStats | None" = None
     marginal_zg_stats: "MarginalIntegerStats | None" = None
+    marginal_zb_stats: "MarginalIntegerStats | None" = None
 
     @staticmethod
     def _items(histogram: tuple[tuple[bytes, int], ...]) -> tuple[bytes, ...]:
@@ -283,51 +284,6 @@ def _conditioned_tv(left: Counter[bytes], right: Counter[bytes], left_accepts: i
     return min(Decimal(1), sum(abs(Decimal(left[key]) / Decimal(left_accepts) - Decimal(right[key]) / Decimal(right_accepts)) / Decimal(2) for key in keys))
 
 
-def _sample_protocol_rejection(
-    seed: bytes,
-    label: bytes,
-    index: int,
-    proof: RingProtocol1Proof,
-    bits: Sequence[Sequence[RingElement]],
-    openings: Sequence[Sequence[RingElement]],
-    p: int,
-    w: int,
-    distribution: Protocol1DistributionParameters,
-    params: RingProtocol1Parameters,
-) -> tuple[bool, Decimal]:
-    """Run the paper-shaped two-stage gate on a complete response tuple.
-
-    For honest transcripts, this is a diagnostic replay of the same exponent
-    used by the sampled prover. It is not a replacement for the exact D1/D2
-    rejection proof.
-    """
-    t_profile, opening_profile, t1, t2 = distribution.profiles(
-        p, w, len(proof.responses_g[0]), len(proof.response_zg), proof.responses_g[0][0].params.n,
-    )
-    del t_profile, opening_profile
-    challenge_coefficients = centered_coefficients(proof.responses_g[0][0])
-    bit_scalars = tuple(
-        tuple(
-            centered_coefficients(bit)[0]
-            if all(value == 0 for value in centered_coefficients(bit)[1:])
-            else (_raise_simulator_bit(),)
-            for bit in row
-        )
-        for row in bits
-    )
-    opening_scalars = tuple(tuple(coefficient_vector(row)) for row in openings)
-    # This legacy response-only helper cannot reconstruct the per-index
-    # r_{b,i}/r_{t,i} tuple required by Gao Step 10. Refuse rather than
-    # silently replacing it with the aggregated z_b response.
-    raise SHVZKComparisonError(
-        "complete per-index rejection tuples are required; aggregated z_b is insufficient"
-    )
-
-
-def _raise_simulator_bit():
-    raise SHVZKComparisonError("simulator comparison requires constant 0/1 ring bits")
-
-
 def compare_fixed_challenge(
     seed: bytes, statement: bytes, base_key: HMCKey, key_e: HMCKey, key_f: HMCKey, key_g: HMCKey,
     bit_commitments: Sequence[Sequence[RingElement]], bits: Sequence[Sequence[RingElement]],
@@ -356,15 +312,25 @@ def compare_fixed_challenge(
     honest_logs: list[Decimal] = []; simulator_logs: list[Decimal] = []
     honest_g_coeffs: list[int] = []; simulator_g_coeffs: list[int] = []
     honest_zg_coeffs: list[int] = []; simulator_zg_coeffs: list[int] = []
+    honest_zb_coeffs: list[int] = []; simulator_zb_coeffs: list[int] = []
     _, opening_profile, _, _ = distribution.profiles(p, w, width, base_key.randomness_width, base_key.params.n)
     for index in range(samples):
         honest_proof = None; simulator_proof = None
         honest_ok = False; simulator_ok = False
+        honest_per_index_zb = None
         try:
             masks = sample_protocol1_masks(_source(seed, b"honest-masks", index), base_key.params, len(normalized_bits), width, base_key.randomness_width, p, w, distribution)
             honest_proof = build_protocol1_ring_transcript(statement, base_key, key_e, key_f, key_g, public, normalized_bits, normalized_openings, masks.t, masks.r_e, masks.r_f, masks.r_t, params, zeta=zeta, challenge_x=challenge_x)
             honest_ok = verify_protocol1_ring(statement, base_key, key_e, key_f, key_g, public, honest_proof, params, zeta=zeta, challenge_x=challenge_x)
             if honest_ok:
+                per_index_zb = tuple(
+                    tuple(
+                        challenge_x.mul(normalized_openings[row][column]).add(masks.r_t[row][column])
+                        for column in range(base_key.randomness_width)
+                    )
+                    for row in range(len(normalized_openings))
+                )
+                honest_per_index_zb = per_index_zb
                 audit = build_rejection_tuple_audit(
                     challenge=challenge_x,
                     bits=_constant_bits(normalized_bits),
@@ -375,11 +341,9 @@ def compare_fixed_challenge(
                     r_t=masks.r_t,
                     responses_g=honest_proof.responses_g,
                     response_zg=honest_proof.response_zg,
-                    response_zb_by_index=tuple(
-                        tuple(challenge_x.mul(normalized_openings[row][column]).add(masks.r_t[row][column]) for column in range(base_key.randomness_width))
-                        for row in range(len(normalized_openings))
-                    ),
+                    response_zb_by_index=per_index_zb,
                 )
+                del audit
                 plan = build_rejection_plan(
                     _source(seed, b"honest-rejection", index),
                     masks,
@@ -391,7 +355,6 @@ def compare_fixed_challenge(
                 honest_ok = plan.accepted
                 if honest_ok:
                     honest_logs.append(plan.probability.ln() if plan.probability > 0 else Decimal("-Infinity"))
-                del audit
         except (RingProtocol1Error, SamplingError, TypeError, ValueError):
             honest_ok = False
         try:
@@ -423,12 +386,20 @@ def compare_fixed_challenge(
             honest_accepts += 1; response = encode_response_tuple(honest_proof); transcript = encode_fixed_transcript(statement, base_key, key_e, key_f, key_g, public, zeta, challenge_x, honest_proof); honest_response[response] += 1; honest_transcript[transcript] += 1; honest_conditioned_response[response] += 1; honest_conditioned_transcript[transcript] += 1
             honest_g_coeffs.extend(centered_coefficients(honest_proof.responses_g[0][0]))
             honest_zg_coeffs.extend(centered_coefficients(honest_proof.response_zg[0]))
+            if honest_per_index_zb is not None:
+                honest_zb_coeffs.extend(
+                    centered_coefficients(honest_per_index_zb[0][0])
+                )
         else:
             honest_response[_REJECT] += 1; honest_transcript[_REJECT] += 1
         if simulator_ok and simulator_proof is not None:
             simulator_accepts += 1; response = encode_response_tuple(simulator_proof); transcript = encode_fixed_transcript(statement, base_key, key_e, key_f, key_g, public, zeta, challenge_x, simulator_proof); simulator_response[response] += 1; simulator_transcript[transcript] += 1; simulator_conditioned_response[response] += 1; simulator_conditioned_transcript[transcript] += 1
             simulator_g_coeffs.extend(centered_coefficients(simulator_proof.responses_g[0][0]))
             simulator_zg_coeffs.extend(centered_coefficients(simulator_proof.response_zg[0]))
+            if response_zb_components:
+                simulator_zb_coeffs.extend(
+                    centered_coefficients(response_zb_components[0][0])
+                )
         else:
             simulator_response[_REJECT] += 1; simulator_transcript[_REJECT] += 1
     response_items = lambda counter: tuple(key for key, count in counter.items() for _ in range(count))
@@ -448,6 +419,7 @@ def compare_fixed_challenge(
         simulator_mean_log_acceptance=sum(simulator_logs, Decimal(0)) / Decimal(len(simulator_logs)) if simulator_logs else None,
         marginal_g_stats=marginal_integer_stats(honest_g_coeffs, simulator_g_coeffs) if honest_g_coeffs and simulator_g_coeffs else None,
         marginal_zg_stats=marginal_integer_stats(honest_zg_coeffs, simulator_zg_coeffs) if honest_zg_coeffs and simulator_zg_coeffs else None,
+        marginal_zb_stats=marginal_integer_stats(honest_zb_coeffs, simulator_zb_coeffs) if honest_zb_coeffs and simulator_zb_coeffs else None,
     )
 
 

@@ -80,6 +80,22 @@ class Protocol1SHVZKComparisonTests(unittest.TestCase):
         self.assertTrue(result.honest_mean_log_acceptance.is_finite())
         self.assertLessEqual(result.honest_mean_log_acceptance, 0)
 
+    def test_marginal_zb_stats_populated_with_enough_samples(self):
+        """z_b,i marginal (per-index, pre-aggregation) must be collected on
+        both honest and simulator accepted paths, completing the (g,z_g,z_b,i)
+        three-way marginal comparison Gao's Lemma 6 claims for all three."""
+        result = compare_fixed_challenge(
+            b"zb-marginal-seed", b"statement", self.base, self.e, self.f, self.g,
+            self.commitments, self.bits, self.openings, 1, 2,
+            self.distribution, self.proof_params, self.zeta, self.x, 256,
+        )
+        self.assertGreater(result.honest_accepts, 0)
+        self.assertIsNotNone(result.marginal_zb_stats)
+        self.assertGreater(result.marginal_zb_stats.left_count, 0)
+        self.assertGreater(result.marginal_zb_stats.right_count, 0)
+        self.assertGreaterEqual(result.marginal_zb_stats.exact_tv, 0)
+        self.assertLessEqual(result.marginal_zb_stats.exact_tv, 1)
+
     def test_invalid_sample_count_rejected(self):
         with self.assertRaises(SHVZKComparisonError):
             compare_fixed_challenge(
