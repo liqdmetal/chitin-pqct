@@ -1,0 +1,2692 @@
+      Lattice-based Zero-knowledge Proofs for
+        Blockchain Confidential Transactions
+
+    Shang GAO1, Tianyu ZHENG1, Yu GUO2, and Zhe PENG1 Bin XIAO1
+
+                1 The Hong Kong Polytechnic University, Hong Kong, China
+                                    2 SECBIT Labs, Suzhou, China
+
+                    {shanggao,jeffrey-zhe.peng,csbxiao}@polyu.edu.hk
+                                  tian-yu.zheng@connect.polyu.hk
+                                             yu.guo@secbit.io
+
+         Abstract. We propose new zero-knowledge proofs for efficient and postquan-
+         tum ring confidential transaction (RingCT) protocols based on lattice as-
+         sumptions in Blockchain systems. First, we introduce an inner-product
+         based linear equation satisfiability approach for balance proofs with a
+         wide range (e.g., 64-bit precision). Unlike existing balance proofs (Ma-
+         tRiCT and MatRiCT+) that require additional proofs for some "correc-
+         tor values", our approach avoids the corrector values for better efficiency.
+         Furthermore, we design a ring signature scheme to efficiently hide a user's
+         identity in large anonymity sets. Different from existing approaches that
+         adopt a one-out-of-many proof (MatRiCT and MatRiCT+), we show
+         that a linear sum proof suffices in ring signatures, which could avoid
+         the costly binary proof part. We further use the idea of "unbalanced"
+         relations to build a logarithmic-size ring signature scheme. Finally, we
+         show how to adopt these techniques in RingCT protocols and implement
+         a prototype to compare the performance with existing approaches. The
+         results show our solutions can reduce up to 50% and 20% proof size,
+         30% and 20% proving time, 20% and 20% verification time of MatRiCT
+         and MatRiCT+, respectively. We also believe our techniques are of in-
+         dependent interest for other applications and are applicable in a generic
+         setting.
+
+Keywords: Lattice-based cryptography, zero-knowledge proof, balance proof,
+ring signature, RingCT, blockchain
+
+1 Introduction
+
+Cryptocurrencies adopt the blockchain technique where each participant main-
+tains a ledger of all transactions to avoid any tampering attempts from minority
+attackers. In private/anonymous cryptocurrencies, the amount3 stored in each
+
+3 In this paper, the "amount" refers to "account balance". We avoid using balance
+   here as it conflicts with balance proofs.
+account and the user's identity need to be hidden from the outside world. Mean-
+while, it also requires public verification to ensure each transaction is valid. Ex-
+isting solutions such as Monero [24b] and Zcash [SCG+14] adopt zero-knowledge
+proofs (ZKPs) to prove useful statements without leaking any private informa-
+tion. For instance, in Monero, a ring confidential transaction (RingCT) proto-
+col is used with a range proof to show all amounts are non-negative and the
+difference between outputs and inputs is zero (balance property), and a ring
+signature-like approach to hide the identity of a spender with one-out-of-many
+proofs [Noe15] (recent research also demonstrates with more efficient partial
+knowledge proofs [ACF21, ZGSX23]). However, as the security of these imple-
+mentations is mainly based on discrete logarithm assumptions, they are at risk
+of potential attacks from quantum computers.
+
+    This deficiency has impelled the development of "post-quantum" solutions.
+Without exception, blockchain communities also consider using quantum-secure
+techniques to fill the gap. Among all post-quantum approaches, lattice-based
+cryptography is one of the most promising candidates based on computational
+lattice problems. Unfortunately, the costs of lattice-based solutions increase sig-
+nificantly in comparison with those in discrete logarithm settings. Taking the
+range proof proposed by Esgin et al. [ESLL19] as an example, a single proof
+costs more than 90KB while the Bulletproofs protocol [BBB+18] costs less than
+1KB. Even worse, as the amounts in a RingCT protocol need to be committed
+separately, the efficient aggregation approach in [ESLL19] cannot be adopted.
+MatRiCT [EZS+19] is the first practical lattice-based RingCT protocol to op-
+timize the proof size in a blockchain environment and is currently applied in
+Hcash [24a]. By using a novel balance proof with hashed-message commitments
+(HMC) to show a transaction is valid, MatRiCT reduces the size of commitments
+and allows proofs on a wide range. Furthermore, it adopts techniques such as
+batched commitments and rejection sampling for secrets with a fixed Hamming
+weight in one-out-of-many proofs to improve the efficiency of the ring signature.
+MatRiCT+ [ESZ22] further improves the performance of MatRiCT by optimiz-
+ing the underlying cyclotomic rings. However, both MatRiCT and MatRiCT+
+require some "corrector values" in balance proofs. Proving corrector values that
+are correct imposes a high cost.
+
+1.1 Our contribution
+
+The main goal of this paper is to propose efficient, scalable, and practical ZKPs
+for existing post-quantum4 anonymous cryptocurrencies such as Hcash [24a]. We
+focus on some key problems in lattice-based RingCT protocols and significantly
+reduce the proof size and proving/verification time with our new ZKP tech-
+niques. Besides, our approaches optimize the high-level ZKP relations, which
+are compilable with MatRiCT [EZS+19] and MatRiCT+ [ESZ22].
+
+4 The post-quantum security in this paper relies on the hardness of "post-quantum"
+   lattice assumptions as with [ESLL19, EZS+19, ESZ22].
+
+                                                   2
+    To achieve the high efficiency of our approach, we first extend the amortiza-
+tion technique in [ACF21] to deal with non-homomorphic functions, and propose
+a partially amortized proof for binary relations (Section 3). Furthermore, we de-
+sign a new inner-product based linear equation satisfiability protocol (Section
+4) which implies balance relations in RingCT. Additionally, we introduce a new
+unbalanced linear sum proof (Section 5) which proves a weaker but still secure
+relation to replace the one-out-of-many relation in ring signatures. Finally, to
+build a secure RingCT protocol, we build a linkable version of our ring signa-
+tures (signatures of the same signer can be linked by serial number in the public
+key) and check the count of serial numbers to avoid additional issues (Section
+6).
+
+1.2 Related work
+
+In anonymous cryptocurrencies, RingCT protocols [Noe15, EZS+19, SALY17]
+adopt range proofs to show transaction amounts are valid and ring signature-like
+approaches to hide a spender's identity. We describe existing work in these two
+directions.
+
+    Range proofs. To guarantee the amount of each account in a confidential
+transaction is valid, range proofs [BBB+18] are used in RingCT protocols. By
+encapsulating the amounts in homomorphic commitments, the prover proves that
+1) all the inputs and outputs are non-negative and 2) the sum of inputs equals
+outputs. The proofs can be succinct and efficient with a trusted setup [Gro16,
+GWC19], but will undermine the decentralized property of blockchain systems at
+the same time where no particular trusted authority should be involved. Though
+the trusted setup can be replaced by a secure multi-party computation, the
+process is costly and may not be reusable when the application (i.e., circuit) is
+updated [Gro16]. Currently, the smallest proof without a trusted setup is the
+Bulletproofs protocol [BBB+18], which leverages the vector compression idea
+in [BCC+16]. However, these approaches fail to address quantum attacks as
+they are proposed based on discrete logarithm assumptions.
+
+    One of the most promising post-quantum cryptography candidates is lattice-
+based cryptography. Esgin et al. propose new range proofs in lattice settings
+based on the unbounded-message commitment (UMC) scheme and further adopt
+a new Chinese remainder theorem (CRT) packing technique for efficient batch
+processing [ESLL19]. Unfortunately, the size of a UMC commitment is linear to
+the message size which is not suitable for large values such as amounts of dif-
+ferent accounts. Besides, the batch processing in [ESLL19] is only efficient when
+the amounts of all accounts are committed together in a single commitment,
+while the amounts are usually committed separately in a RingCT protocol. The
+first practical lattice-based RingCT approach is MatRiCT [EZS+19] (applied in
+Hcash [24a]). Instead of using UMC to commit to an amount directly, MatRiCT
+commits to the bits of an amount with HMC [ESS+19] and further adopts a
+balance proof with some "corrector values" to show the sums of inputs and out-
+puts are equal. MatRiCT+ [ESZ22] further reduces the proof size and running
+time of MatRiCT by optimizing the underlying cyclotomic rings. Here we focus
+
+                                                   3
+on MatRiCT since our improvements are based on the techniques proposed in
+MatRiCT, which are quite independent from the improvements in MatRiCT+.
+Though the efficiency has been improved compared with [ESLL19], a subtle issue
+prevents the use of MatRiCT and MatRiCT+ in general cases: the corrector val-
+ues require additional range proofs when dealing with multiple input and output
+accounts.
+
+    Ring signatures. To hide the identity of a signer, ring signatures (one-out-
+of-many proofs) allow one to prove the knowledge of a secret key corresponding
+to an element in a set of public keys. The idea of the ring signature has been
+proposed by Rivest, Shamir, and Tauman [RST01]. In discrete logarithm set-
+tings, logarithmic-size ring signatures [BCC+15,GK15,ZGSX23] have been used
+in different applications. Most of current anonymous cryptocurrencies are im-
+plemented based on discrete logarithm assumptions which is not post-quantum
+secure.
+
+    On the side of lattice settings, linear-size ring signatures have been pro-
+posed [TSS+18, LAZ19], but these approaches are inefficient for large anony-
+mous groups. Libert et al. [LLNW16] design a Merkle tree based accumulator
+and build a ZKP system for this accumulator. With these tools, logarithmic-
+size ring and group signatures are proposed. Furthermore, a linkable version
+of [LLNW16] (signatures created by the same signer can be linked) is introduced
+in [YAL+17]. Though the signature size of [LLNW16, YAL+17] is logarithmic,
+the zero-knowledge arguments applied in the accumulator require multiple pro-
+tocol iterations (multi-shot proofs) to get a negligible soundness error. Esgin et
+al. [ESS+19] introduce new tools for ZKPs to extend the discrete logarithm proof
+techniques in [GK15] to lattice settings. Logarithmic-size ring signatures can be
+easily achieved with these new techniques. A further improvement in [ESLL19]
+makes the underlying ZKPs achieve a negligible soundness error at a single proto-
+col iteration and reduces the signature size accordingly. Following the blueprint
+of [ESLL19], MatRiCT [EZS+19] batches commitments in binary proofs and
+improves the rejection sampling to build a more efficient ring signature scheme.
+Besides, MatRiCT uses two sets of compatible parameters for the ring signature
+to reduce the size. BLOOM [LN22] further reduces the proof size in large rings
+setting by utilizing ABDLOP commitments and Bimodal Gaussians.
+
+2 Preliminaries
+
+We describe some notations and background knowledge used in this paper.
+
+2.1 Notations
+
+We use Zq = Z/qZ to denote the ring of integers modulo q represented by the
+range [- 2 q-1 , 2 q-1 ]. The rings are defined by R = Z[X]/(Xd + 1) and Rq =
+Zq[X]/(Xd + 1) where d > 1 is a power of 2. Bold-face lower-case letters such
+as a and bold-face capital letters such as A are used to denote column vectors
+and matrices respectively. Commitments are denoted by capital letters such as
+
+                                                   4
+C even though they may be vectors (except R for the ring and M, S, N for
+
+the size of different inputs). We use (a, b) to denote appending vector a to b.
+
+For a vector a = (a0, · · · , ak-1), the norms are defined as a =                     i=0 k-1 ai2,
+
+a1 = i=0 k-1 |ai|, and a = maxi |ai|. The norms of a polynomial are defined
+in a similar way as a vector. Suppose x  Zq, we denote xk = (1, x, x2, · · · , xk-1).
+
+Furthermore, the inner-product of two k-dimensional vectors a and b is denoted
+as a, b = i=0 k-1 aibi and the Hadamard product is denoted as a  b = (a0 ·
+
+b0, · · · , ak-1 · bk-1). The Kronecker's delta is denoted as j,i such that j,i = 1
+
+when j = i and otherwise j,i = 0. HW(x) denotes the Hamming weight of
+
+the coefficient vector of x  R. Given a distribution/set S, a $ S denotes
+
+sampling a from S, or uniformly sampling from a set S. Define SB as the subset
+of polynomials in Rq with infinity norm at most B  Z.
+
+    The challenge space in a -protocol is defined as follows:
+
+               C = {x  R : deg(x) = d - 1  HW(x) = w  x = p}.                            (1)
+
+Clearly, we can observe x1  pw and |C| =               d   · (2p)w. We denote the set of
+                                                       w
+
+challenge differences excluding zero as C.
+
+2.2 Lattice problems and HMC
+
+M-SIS and M-LWE. We define the two well-known lattice problems [LS15],
+module short integer solution (M-SIS) and module learning with errors (M-
+LWE), which our schemes' security relies on.
+
+Definition     1.    M-SIS(n, m, q, ).     Given  A    Rn×m,  the  goal  of  the  problem   is
+
+               Rm                                         q
+
+to  find  z       q  such  that  Az  =  0  mod q and 0 < z  .
+
+Definition 2. M-LWE(n, m, q, B). Let s  SnB be a secret key. Define LWE(q, s)
+as the distribution obtained by sampling a  Rqn, e  SB and outputting
+
+(a, a, s + e). The goal of the problem is to distinguish between m given samples
+
+from  either   LWE(q, s)   or    Rn+1.
+
+                                    q
+
+    Hashed-Message Commitment. Let n, m, B, q be positive integers with
+
+m > n. Suppose a prover commits to v-dimensional vectors over Rq for v  1.
+The instantiation of the hashed-message commitment (HMC) scheme [EZS+19,
+BDL+18] is as follows:
+
+-   CKeygen(1):      Sample      Gr        Rn×m   and  Gm     Rn×v .  Output      ck  =  G  =
+
+                                              q                  q
+
+    (Gr, Gm)  Rqn×(m+v).
+
+- Commitck(m): Sample r  {-B, · · · , B}md. Output r and Comck(m; r) =
+
+    G · (r, m) = Gr · r + Gm · m.
+
+- COpenck(C, (y, m, r)): If (m, r)   and yC = Comck(m, r) return
+
+    1, otherwise return 0.
+
+The computationally hiding and computationally strong binding prosperities are
+defined as follows.
+
+                                           5
+Definition 3. For all PPT adversaries A, computational hiding and computa-
+
+tional strong -binding are defined respectively as
+
+                    ck  CKeygen(1);                                                                1
+                                                                                                    ,
+            Pr  (m0, m1)  ACKeygen(ck);                                  :   A(C )   =   b             and
+                     b  {0, 1}; C  Commitck(mb) 2
+                                                                                           
+            Pr  ck  CKeygen(1); : COpenck(C, t0) = 1  (m0, r0) = (m1, r1)  0,
+                     (C, t0, t1)  A(ck)
+                                                          COpenck(C, t1) = 1
+
+where ti = (yi, mi, ri) for i = {0, 1} and the norm bound parameter in COpen
+is .
+
+Lemma 1. (Lemma 2.3 in [EZS+19]) For a (large) set of appropriately
+chosen parameters, if M-LWE(m - n, m, q, B) problem is hard then the HMC
+is computationally hiding. If M-SIS(n, m + v, q, 2) is hard, then the HMC is
+computationally strong -binding to the same relaxation factor y.
+
+    Given   a   r    Rqm,   we  write        it    into   r  =  (r,      r)  where    r      Rn    and    r      Rm-n.
+
+                                                                                                q                   q
+
+Similarly,  write    Gr     =   (G     ,  G     )  where     G       Rn×n       and  G       Rqn×(m-n).        We    have
+                                    r        r
+           Gr ·r +Gr ·r.                        G               r       q               r
+
+Gr ·r   =                       When               r  is  non-singular       (non-singular         over   all  the   fields
+
+of  Rq  splits  into),  Gr ·r   is  indistinguishable              from      a  random     element     a       Rn    (since
+
+r       (G )-1                                                                                                    q
+
+    =        r  ·  a).  It  indicates        n     M-LWE        instances       from  M-LWE(m          -  n,   m,    q,  B).
+
+As  the    probability      of  Gr        being    singular        over  Rn     is   negligible    in     our  settings
+
+       [EZS+ 19, ESZ22]),                                          G        q
+
+(see                            the       probability        of       r  being  singular     is  also  negligible        (by
+
+swapping columns). Thus, the HMC is computational hiding.
+
+    When given an HMC collision (m0, r0) = (m1, r1), we have G · (m0, r0) =
+
+G · (m1, r1), which implies G · (m1 - m0, r1 - r0) = 0. This gives a solution to
+
+M-SIS(n, m + v, q, 2) directly since (m1 - m0, r1 - r0)  2. Thus, HMC is
+
+computational strong -binding. Based on the result in [MR09], the parameters
+
+should satisfy the following relation to ensure HMC is -binding:
+
+                                                      
+                                       min{q, 22 nd log q log } > 2,
+                                                                                                                         (2)
+
+where  is a root Hermite factor to indicate the security level.
+
+2.3 Lattice-based -protocol
+
+A -protocol is a public coin interactive proof system to allow a prover to
+convince a verifier that a statement is true. It has three properties: complete-
+ness, knowledge soundness, and special honest-verifier zero-knowledge (SHVZK)
+[ESLL19, EZS+19]. Here we start from a simple example in discrete logarithm
+settings to show the knowledge of a secret m such that C = Comck(m) for a
+public C (randomness is omitted for simplicity). Specifically, the prover samples
+a masking vector d and sends D = Comck(d). The verifier challenges with a
+random challenge x and the prover responds with f = xm + d. Finally, the
+verifier checks Comck(f ) = xC + D.
+
+                                                             6
+     Relaxed proof. Recall HMC. The opening algorithm COpen does not sim-
+
+ply  check  C  ?  Comck (m )  in  common     lattice-based  schemes  [DPLS18],  but  with
+
+               =
+
+a relaxation factor y  Rq as in [ESLL19, BLNS20]. This is due to the straight-
+
+forward soundness proofs under lattice assumptions do not work (the challenge
+
+differences may not be invertible and the extracted witness may not be short
+
+in the soundness proof). Consider a simple case with two accepting transcripts,
+(D, x1, f1) and (D, x2, f2). Though the extractor can get (x2 - x1)Com(m) =
+Com(f2 - f1), it cannot simply output m = (x2 - x1)-1(f2 - f1) since: 1)
+(x2 - x1) may not be invertible; and 2) even (x2 - x1) is invertible, (x2 - x1)-1
+may not be short and the extracted opening will not be a valid one. One solution
+
+is to use a relaxed proof by relaxing the verification relation to overcome the
+complications [ESLL19,BLNS20]: instead of extracting the opening of Com(m),
+
+the extractor is allowed to extract the opening of yCom(m) (y = x2 - x1 in this
+example). Since f1 and f2 are short, (f2 - f1) is still short. Accordingly, the
+proving and relaxed opening relations are different in relaxed proofs.
+
+    Rejection sampling. In lattice settings, the verifier also needs to check
+the norm bound of f to ensure the hardness of M-SIS problem in Section 2.2.
+Therefore, d must be sampled from a distribution with a larger range to hide
+xm term (denoted as D, where  is the norm bound in M-SIS), while the bound
+of the distribution should be manageable for the hardness of M-SIS. Besides, the
+prover cannot output f directly since the distribution of f leaks the information
+of m when d is not uniformly sampled from the field. For instance, consider one-
+
+bit message m  {0, 1}, the distribution of f is the same as the distribution of d
+
+when m = 0, and will shift by x when m = 1. Anyone can infer m by observing
+the distribution of f . Existing solutions adopt an additional rejection sampling
+to reject responses that are out-of-bounds. Generally speaking, only f 's that can
+be "touched" by all possible values of m and follow an expected distribution are
+
+acceptable. As we directly use the results of rejection sampling in this paper, we
+
+only briefly summarize rejection sampling [Lyu12] in Algorithm 1 (restricting the
+distribution of (x, f ) being independent of m), where T = xm and  = /T .
+Returning 1 means f passes the rejection sampling.
+
+Algorithm 1 Rejection Sampling [Lyu12]
+
+Rej(f , m, , T )
+
+1:     = T ;   µ()  =  exp(  12  +  22 1 );  u  [0, 1)
+                             
+
+2: if u > µ() · exp(1  -2f ,m+m2             ) then
+
+                              22
+
+3: Return 
+
+4: end if
+
+5: Return 1
+
+    We summarize the lattice-based -protocol below. The major differences
+with that in discrete logarithm settings is highlighted in blue.
+
+                                                   7
+1. P: Sample d $ Dm T and set D = Comck(d).
+2. P  V: D.
+
+3. V  P: x $ C.
+
+4. P: Set f := xm + d and run Rej(f , xm, , T ).
+
+5. P  V: f .                                                  
+
+                              ?                       ?
+
+6. V: Check Comck(f ) = xC + D and f   2T md.
+
+2.4 Vandermonde matrix and one-shot proof [ESLL19]
+
+A (k + 1)-dimensional Vandermonde matrix V is defined as follows for some
+
+x0, · · · , xk  R:
+
+                                         1 x0 · · · x0   k
+
+                                    1    x1     ···      xk 
+
+                                                           1
+
+                                                            
+                                 V =  .. .. . . ..  .                                                 (3)
+                                    . .               . .
+
+                                         1 xk · · · xkk
+
+Let adj(V ) denotes adjugate matrix of V and det(V ) denotes the determinant
+
+of V . We have det(V ) = 0i<jk(xj - xi). Let (0, · · · , k) be the last row of
+adj(V ). Then
+
+                           i = (-1)i+k                (xj - xs).
+                                         0s<jk (4)
+
+                                             s,j=i
+
+Lemma 2. (Lemma 4 in [ESLL19]) Let  = 2 k(k+1) , we have  det(V ) 
+(2p)w-1 when using the challenge space in Equation (1).
+
+The one-shot proof is a technique proposed in [ESLL19] to efficiently prove
+
+non-linear polynomial relations. Consider a k-degree polynomial relation with
+
+commitments C0 = Comck(m0; r0), · · · , Ck = Comck(mk; rk). The prover en-
+
+codes the message as (f , z)  (          i=0 k ximi,     k    xiri)          with   a  challenge  x.  The
+                                                         i=0
+
+verifier checks the norms of f , z and          ki?
+
+                                                i=0 x Ci = Comck(f ; z). This protocol
+
+has (k + 1)-special soundness as we can extract a witness in one shot with the
+
+following approach.
+
+Considering (k + 1) accepted transactions with distinct challenges xi's and
+
+responses (fi, zi)'s where i  [0, k] (Ci's are the same). We have the following
+
+relation
+
+                    1 x0 · · · x0   k                 Comck(f0; zk)                 
+                                         C0
+                    1               xk   C1                                         
+                       x1  ·  ·  ·                    Com     ck  (f   1  ;  zk  )  
+                                      1
+
+                                       
+                     .. .. . . ..  ·  ..  =                        ..               .                 (5)
+                    . . . .   .                                                     
+                                                                  .
+
+                    1 xk · · · xkk       Ck           Comck(fk; zk)
+
+Let the Vandermonde matrix in Equation (5) be V . Considering the property
+adj(V ) · V = det(V ) · Ik+1, we multiply both sides of Equation (5) by adj(V ).
+
+                                             8
+Based on Equation (4), its last row becomes
+
+            k
+
+            det(V ) · Ck = iComck(fi; zi) := Comck(mk; rk),                          (6)
+
+            i=0
+
+where (mk, rk) = ( i=0 k ifi,   i=0 k izi) is a relaxed opening to yCk with a
+relaxation factor y = det(V ).
+
+2.5 Amortized relation [ACF21, GQZ+24]
+
+The amortization technique is used to open multiple linear forms for essentially
+the price of one [ACF21, GQZ+24]. In [ACF21], Attema et al. describe amor-
+tized exponentiations in discrete logarithm settings. For simplicity, we regard
+the randomness as one dimension of the secret. Consider the following relation
+
+            R (ck, (B AmorExp = i, Pi)Si=1), ((bi)Si=1) :S , (7)
+                               (Comck(bi) = Bi, g(bi) = Pi)i=1
+
+where g(·) is a homomorphic function, it is equivalent to prove Comck( i=1 S ibi) =
+i=1 S iBi and g( i=1 S ibi) =   S
+                                i=1   i Pi  with  a  challenge  .  The  prover  can  fur-
+
+ther use one vector a to mask the response f = a+    k     i bi    as  with  a  standard
+                                                     i=1
+
+-protocol.
+
+3 Partial Amortization
+
+3.1 Batched verification of binary proofs
+
+The binary proof is a fundamental building block in RingCT protocols (as
+well as other applications) to prove the knowledge of a binary vector. When
+proving multiple binary vectors, this can be done efficiently by committing
+all vectors in one commitment. Unfortunately, in RingCT protocols such as
+MatRiCT [EZS+19] and MatRiCT+ [ESZ22], this batching technique cannot
+be applied since each account is committed separately. For example, to mint
+coins for S accounts (bi, rb,i, Bi)i=0 S-1 such that Bi = Comck(bi; rb,i) (instead
+of Comck(b0, · · · , bS-1; rb)), the prover needs to run a binary proof to prove
+the knowledge of bi's and bi's being binary vectors. Specifically, the prover
+needs to use S vectors (ti, rt,i)i=0 S-1 to mask bi's and rb,i's as gi = xbi + ti
+and zb,i = xrb,i + rt,i based on a challenge x. Accordingly, the verifier needs to
+check Comck(gi; zb,i) = xBi + Gi holds for all i's, where Gi = Comck(ti; rt,i) (a
+further check to ensure bi  (1 - bi) = 0 is also needed). Since the verification is
+conducted separately for each i, all zb,i's must be included in the proof, which
+increases the proof size when dealing with multiple accounts.
+
+    Our observation is that it is possible to batch the verification of Comck(gi; zb,i) =
+xBi + Gi with the amortized technique in [ACF21, GQZ+24]. Unfortunately,
+since the binary constraint bi  (1 - bi) = 0 is not homomorphic, it cannot
+
+                                     9
+be regarded as the g(·) in Equation (7). This brings us to the idea of partial
+
+amortization: only using the batched verification for Comck(gi; zb,i) = xBi + Gi
+(i.e., the knowledge of bi's) and leaving the binary constraint part (i.e., bi's are
+binary vectors) unchanged. Specifically, we replace Comck(bi; rb,i) = Bi with
+Comck( i=0 S-1 ibi, i=0 S-1 irb,i) = i=0 S-1 iBi based on a challenge . Since the
+remaining (non-homomorphic) binary constraint does not involve rb,i (i.e., Bi),
+the prover can batch rb,i's and only send one element zb = i=0 S-1 izb,i.
+
+    Note that in the security (soundness) analysis, if we use the one-shot proof
+
+[ESLL19] directly to extract the relaxed openings of Bi's, we need to use the
+i-th row of a Vandermonde's adjugate matrix, which is much different from the
+
+form in Equation (4) when i = S. Additionally, the relaxation factor  det(V )
+increases significantly with S, which requires a larger parameter set to ensure
+
+the hardness of M-SIS and reduce the soundness error. Fortunately, as claimed
+in [EZS+19] and [ESZ22], the most common cases in cryptocurrencies are trans-
+
+actions with two outputs. Thus, we focus on the case of S  2 in the soundness
+
+analysis of this paper. Besides, one may also reduce the growth with different
+challenges i's in a special challenge space to compute i=0 S-1 iBi and ensure
+the norm bound is relatively small as with [ESZ22].
+
+3.2 Partially amortized binary proofs
+
+Recall the amortized proof in Section 2.5. We generalize the commitment func-
+
+tion Comck(·) in Equation (7) to any homomorphic function h(·) and discuss the
+
+case when g(·) is not homomorphic. Suppose Bi and Pi's only share a part of com-
+
+mon secrets, i.e., h(bi, si) = Bi and g(bi, ti) = Pi for witness (bi, si, ti)i=0 S-1 (this
+
+is a common case in many applications when regarding si's and ti's are different
+randomness, see our binary relation below as an example). Let s = i=0 S-1 isi
+and B = i=0 S-1 iBi. It is possible only to amortize the homomorphic part
+    S-1
+h(  i=0  ibi, s)  =  B,  and  keep  the  g(·)  part  unchanged.  Therefore,  the  prover
+
+only needs to send (bi, ti)i=0 S-1 and s (instead of all si's) in the proof (we do not
+
+consider HVZK property here for simplicity).
+
+                                                                                                                                                 ?
+
+    To apply the above technique in lattice settings, besides checking g(bi, ti) =
+
+         S-1 i           ?
+Pi and h( i=0  bi, s) = B, the verifier also needs additional norm checks to
+
+ensure bi's and ti's are smaller than the claimed bounds and s is short.
+
+    The correctness of the protocol follows directly. The soundness for h(·) part
+
+follows the soundness of the amortized exponentiations in [ACF21], which takes
+
+an (S × S)-size Vandermonde matrix to extract si with i=0 S-1 jisi on different
+challenges (j)j=0 S-1 (in lattice settings, it is a little bit different to extract a
+relaxed opening, see our binary proof for more details). Other parts (bi, ti)i=0 S-1
+can be derived directly from the prover's proof.
+
+    It is not hard to further add the zero-knowledge property to the above proto-
+
+col. More specifically, we describe a partially amortized binary proof in Protocol
+
+1 as a fundamental building block of our RingCT protocol, which shows Bi's are
+
+commitments to bits (for S  2).
+
+                                         10
+Protocol 1 Partially Amortized Binary Proof.
+
+Pbin(ck, (Bi, bi, rb,i)i=0 S-1), Vbin(ck, (Bi)i=0 S-1)
+
+1: Vbin  Pbin:  C.                                                
+2: Pbin: Set T1 = p 2wk and T2 = Bwp 3md.
+
+3: Pbin: Sample masking values
+
+     re  Sm B ; rf  D2T2 m ; ti  D1T1 k ; rt,i  D2T2 m i  [0, S).
+
+4: Pbin: Compute the commitments
+
+     E = Comck((ti  (1 - 2bi))i=0 S-1; re);                                F = Comck((-ti  ti)i=0 S-1; rf );
+
+                 S-1                 S-1
+
+     G = Comck( iti; irt,i).
+
+                 i=0                 i=0
+
+5: Pbin  Vbin: E, F, G.
+
+6: Vbin  Pbin: x  C.
+
+7: Pbin: Compute gi = xbi + ti, i  [0, S).
+
+8:   Pbin:  Run  Rej((gi  )  S-1  ,  (x  b  i  )i=0 S-1  ,  1  ,  T1  ).
+                             i=0
+                                                                                                     i=0 S-1 izb,i.
+9: Pbin: Compute zg = xre + rf , zb,i = xrb,i + rt,i, and zb =
+
+10:  Pbin:  Run  Rej((zg  ,  (zb,i   )i=0 S-1  )  ,  x(re   ,  (r  b,i  )  S-1  ),  2  ,  T2  ).
+                                                                           i=0
+11: Pbin  Vbin: (gi)i=0 S-1, zg, zb.
+
+12: Vbin: Conduct the following checks
+
+            ?                                               ?                                     ?
+
+     gi,j  21T1 d, i, j; zg  22T2 md; zb  2md2T2(wp + 1);
+
+                                                                           S-1                       S-1
+
+            ?                                        S-1                            i             ?       igi; zb).
+     xE +F = Comck((gi (x·1-gi))i=0 ; zg); x                                         Bi +G = Comck(
+
+                                                                           i=0                       i=0
+
+Definition 4. The following defines the relations for multiple binary vectors,
+proving Rbin and relaxed opening Rbin:
+
+                 R ((ck, (Bi) bin(T ) = i=0 S-1), (bi, rb,i)i=0 S-1) : bi  {0, 1}k ,
+                                       rb,i  T  Bi = Comck(bi; rb,i)
+
+                 R ((ck, (Bi) bin(T ) = i=0 S-1), (y, (bi, rb,i)i=0 S-1) : bi  {0, 1}k ,
+                                       rb,i  T  yBi = Comck(ybi; rb,i)
+
+where T and T are norm bounds of rb,i and rb,i respectively and y is a relaxation
+factor.
+
+    To ensure the hardness of M-SIS in lattice settings, the prover needs to sample
+the masking values in special distributions (steps 2 and 3) and reject results that
+are out-of-bounds (steps 8 and 10). Accordingly, the verifier should check the
+bound based on the claimed bounds of the openings (step 12, first line).
+
+                                                   11
+    A binary relation indicates two constraints, bi  {0, 1}k and Bi = Comck(bi; rb,i).
+For the former one, it is equivalent to show bi  (1 - bi) = 0. Specifically, in a
+-protocol, the prover encodes bi as gi = xbi + ti with a challenge x and mask-
+ing vectors ti's (step 7), which further allows the prover to check xE + F =
+Comck((gi  (x · 1 - gi))i=0 S-1; zg), where E = Comck((ti  (1 - 2bi))i=0 S-1; re),
+F = Comck((-ti  ti)i=0 S-1; rf ), and zg = xre + rf (steps 4, 9, and 12). This part
+is same as a standard binary proof.
+
+    With our partial amortization, the latter constraint can be converted to
+Comck( i=0 S-1 ibi; i=0 S-1 irb,i) = i=0 S-1 iBi under a challenge . Since gi =
+xbi +ti, the prover needs to send the commitment G of the batched masking vec-
+tors and the batched randomness zb to allow the verifier to check x i=0 S-1 iBi +
+G = Comck( i=0 S-1 igi; zb).
+
+Theorem 1. Suppose S  2. Let  = S(S - 1)/2, q/2 > 16(w1)2pkd, bin =
+
+4p2 d3w3 32dp2k341 + 322B2m2 , and the HMC is hiding and bin-binding.
+                                                                              
+
+Protocol 1 has (S, 3)-special soundness for relations Rbin(B md) and
+Rbin(8mdw2p22B 3md) and SHVZK with a completeness error 1-1/(µ(1)µ(2))
+defined in Lemma 6.
+
+    The proof for Theorem 1 is given in Appendix B.
+
+4 Linear Equation for Balance Proofs
+
+4.1 Corrector values in balance proofs
+
+In existing RingCT protocols, to prove a transaction is valid, a spender (prover)
+needs to show 1) all the inputs and outputs are non-negative and 2) the differ-
+ence between inputs and outputs is zero. The former relation can be checked
+in a range proof while the latter one is quite simple with a homomorphic com-
+mitment scheme. In lattice settings, some approaches use UMC to commit to
+an unbounded secret like amount [ESLL19, BDL+18]. However, as the size of
+a UMC commitment grows linearly with the secret size, using a range proof
+directly is not practical in RingCT protocols.
+
+    MatRiCT [EZS+19] and MatRiCT+ [ESZ22] commit to bits of each amount
+to reduce the cost of UMC. Thus, the former relation can be proved in a binary
+proof. For the latter one, it requires "corrector values" to ensure Bits(x1) +
+Bits(x2) equals to Bits(x1 + x2) after some corrections. For instance, suppose
+a prover wants to prove that the following relations hold for M inputs and S
+outputs:
+
+ai  0, i  [0, M );  bi  0, i  [0, S);   (8)
+
+M -1      S-1
+
+      ai = bi;                          (9)
+
+i=0       i=0
+
+where ai's are amounts of input accounts and bi's are amounts of output ac-
+counts. A balance proof first converts each amount into k bits, Bits(ai) =
+
+      12
+(ai,0, · · · , ai,k-1) = ai and Bits(bi) = (bi,0, · · · , bi,k-1) = bi, and commits to
+each ai and bi. Then, the prover shows 1) ai and bi are binary vectors for
+Equation (8) and 2) Equation (9) holds such that:
+
+          M -1       S-1           M -1 k-1             S-1 k-1
+
+                     ai = bi                 2j ai,j =           2j bi,j
+
+          i=0        i=0           i=0 j=0              i=0 j=0
+
+          S-1        M -1
+
+          bi,j -              ai,j + j - 2j+1 = 0,      j  [0, k),
+
+          i=0        i=0
+
+where j's are correct values to ensure  i=0 S-1 bi,j -  i=0 M-1 ai,j + j - 2j+1 = 0
+holds for all j  [0, k) and 0 = k = 0.
+
+The balance proof requires additional work to ensure j's are properly gen-
+
+erated. In general, the prover needs to ensure j  [-M + 1, S - 1] for j  (0, k)
+(Lemma 4.1 in [EZS+19]) with range proofs. It is acceptable to embed j's in
+
+the binary proof of bi,j's when M = 1 and S  2, as with the Algorithm 8 and 9
+in [EZS+19]. However, in other cases, the cost of a standard range proof is not
+
+negligible. Taking the state-of-the-art range proof in [ESLL19] as an example,
+
+the additional 64-bit range proof costs more than 90KB, while other parts only
+
+cost about 100KB. MatRiCT+ [ESZ22] addresses this issue by converting each
+
+range proof into a binary proof and embedding them into the binary proof of
+
+output accounts. Nevertheless, it still requires additional commitments for j's.
+
+One observation is that the corrector values (0, · · · , k) are unnecessary for
+
+balance proofs. To prove Equation (9) holds, one can simply prove
+
+M -1 k-1             S-1 k-1            k-1  S-1          M -1
+
+          2j ai,j =           2j bi,j  2j         bi,j -        ai,j  = 0.  (10)
+
+i=0 j=0              i=0 j=0            j=0  i=0          i=0
+
+Let cj = i=0 S-1 bi,j - i=0 M-1 ai,j . We can rewrite Equation (10) as j=0 k-1 2j cj = 0.
+The fact behind this idea is that though Bits(a1) + Bits(a2) = Bits(a1 + a2), we
+have Bits(a1), 2k + Bits(a2), 2k = Bits(a1 + a2), 2k. Accordingly, we can
+
+fully remove the range proofs and the commitments to j's. Additionally, the
+prover can avoid sending the commitment of c = (cj)j=0 k-1 as it can be computed
+locally by the verifier:
+
+                              S-1            M -1
+
+          Comck(c; ) = Comck(bi; ) - Comck(ai; ).                           (11)
+
+                              i=0            i=0
+
+More importantly, the range proofs of cj's can be avoided when ai's and bi's are
+binary vectors since cj = i=0 S-1 bi,j - i=0 M-1 ai,j implies cj  [-M, S].
+
+    When using the inner-product relation in lattice settings, a serious problem
+
+arises at the same time: after encoding cj as fj = xcj + dj (dj is a masking
+value and x is a challenge), j=0 k-1 2jfj can be greater than q, i.e., ( j=0 k-1 2jfj
+mod q) = j=0 k-1 2j fj . Accordingly, verifying j=0 k-1 2j fj = x j=0 k-1 2j cj + j=0 k-1 2j dj
+
+                                   13
+in Rq may not imply  k-1  2j cj  =  0.  A  straightforward       solution  is  to  use  a  large
+                     j=0
+
+q to avoid overflowing. However, such a solution will result in a large proof size,
+
+making it impractical for real-world applications. In this paper, we solve this
+problem with a new cycle masking approach to ensure both fj's and j=0 k-1 2jfj
+
+are short at the same time with proper dj's (see Section 4.2 for more details).
+
+4.2 Linear equation satisfiability
+
+We generalize the balance relation to a linear equation satisfiability. Let S be
+a positive integer5 and 0, · · · , S-1 be public integers. The linear function is
+defined as
+
+                                                           S-1                             (12)
+
+                     F (X0, · · · , XS-1) = iXi.
+
+                                                            i=0
+
+The linear equation satisfiability is to prove the knowledge of (bi)i=0 S-1 such that
+F (b0, · · · , bS-1) = 0.
+
+    To support bi's with a wide range in lattice settings, we commit to the bits
+of bi's with Bi = Comck(bi; ), where bi is the binary representation of bi. Thus,
+F (b0, · · · , bS-1) can be rewritten as:
+
+                                             S-1
+
+                     F (b0, · · · , bS-1) =       i · 2k, bi .                             (13)
+
+                                             i=0
+
+Definition 5. The following defines the linear equation relations, proving RLE
+and relaxed opening RLE:
+
+      R ((ck, (i, Bi) LE(T ) = i=0 S-1), (bi, rb,i)i=0 S-1) : bi  {0, 1}k  rb,i  T  ,
+                                Bi = Comck(bi; rb,i)  F (b0, · · · , bS-1) = 0
+
+      R ((ck, (i, Bi) LE(T ) = i=0 S-1), (y, (bi, rb,i)i=0 S-1) : bi  {0, 1}k  rb,i  T  ,
+                                yBi = Comck(ybi; rb,i)  F (b0, · · · , bS-1) = 0
+
+where T and T are norm bounds of rb,i and rb,i respectively and y is a relaxation
+factor.
+
+    Inner-product based relation. The RLE indicates two important rela-
+tions: 1) Bi's are commitments to bits and 2) F (b0, · · · , bS-1) = 0. The former
+can be proved in our partially amortized binary proof. For the second, we can
+
+rewrite Equation (13) as
+
+                                                  S-1  k-1
+
+F (b0, · · · , bS-1) = 0                               i 2j bi,j = 0
+
+                                                  i=0  j=0                                 (14)
+
+        k-1                 S-1             k-1
+
+                     2j · ibi,j         = 2jcj = 0,
+
+        j=0                 i=0             j=0
+
+5 In the partially amortized binary proof, we require S  2. However, here S can
+  exceed 2 if the binary proofs for (S - 2)-many bi's are not necessary.
+
+                                        14
+where bi,j is the j-th element of bi and cj = i=0 S-1 ibi,j. Denote c = (c0, · · · , ck-1).
+The verifier can compute the commitment of c with i's and Bi's: C = Comck(c; ) =
+
+   i=0 S-1 iBi. Let f = xc + d with some masking values d = (d0, · · · , dk-1) and
+a challenge x, D = Comck(d; ), dsum = d, 2k. We have
+
+                   Comck(f ; ) = Comck(xc + d; ) = xC + D,
+                   f , 2k = xc + d, 2k = xc, 2k + d, 2k = dsum, (15)
+
+which ensure F (b0, · · · , bS-1) = 0 holds.
+
+     Cycle masking. It is important to note that if the second equation in Equa-
+
+tion (15) is verified on Rq, it may not imply c, 2k = 0 when q is small (the
+
+soundness error increases). A straightforward solution is to use a large q. Unfor-
+
+tunately, this makes q grow linearly with k and a larger q implies a larger proof
+
+size. One may consider computing and sending dsum in R to avoid the overflow
+
+problem. However, the cost of dsum is non-negligible. Here we describe a more
+
+elegant and efficient encoding scheme named cycle masking to find proper dj's
+
+that ensures fj's are short and dsum = 0. Specifically, the prover samples (dj )j=1 k-1
+           d       dk                              dj       2dj+1,
+and  sets       =      =  0.  By  setting  dj  =       -              we  have
+             0
+
+                                   k-1                   k
+
+                dsum = d, 2k = 2j dj - 2j dj = d0 - 2kdk = 0.                                         (16)
+
+                                   j=0                 j=1
+
+Therefore, the prover can avoid transmitting dsum and f0. Accordingly, the veri-
+                              k-1
+fier computes f0 = -          j=1  2j fj   on  R,  verifies  f0         Rq ,  and  only  checks  the  first
+
+equation in (15).
+
+     Note that the new encoding scheme can be further generalized to ensure that
+
+both fi's are short and the corresponding masking vector d satisfies d, t = 0
+
+for a public t = (t0, t1t0, t2t1t0, · · · , i=0 k-1 ti) (the i-th term is ti-1 times of
+                                                                         d       dk
+the  previous   one).     Specifically,   the  prover       first  sets       =      =   0  and  samples
+                                                                           0
+(dj )j=1 k-1. Then, she computes dj = dj - tj+1dj+1. Accordingly, we have d, t =
+
+j=0 k-1 dj i=0 j ti =             k-1                              j                      k-1
+                                  j=0 (dj - tj+1dj+1) i=0 ti = d0 - dk i=0 ti = 0.
+
+Besides linear equation satisfiability, another direct application is to ensure
+
+, 1 = 1 in one-out-of-many proofs (f , 1 = x in steps 3 and 12 in Pro-
+
+tocol 3). Since all fi's are small, we can use a smaller parameter set to reduce
+
+the proof size. But in our ring signatures (Protocol 3), the improvement will be
+
+less significant since we fully avoid the binary proof part. Thus, we describe our
+
+ring signatures with the standard encoding scheme for simplicity.
+
+     Formal protocol. We formally describe our linear equation satisfiability
+
+protocol in Protocol 2. Similar to lattice-based -protocols, the prover needs to
+
+sample the masking values from special distributions (steps 2 and 4) and reject
+
+results that are out-of-bounds (steps 12 and 14). Accordingly, the verifier checks
+
+the norms of the openings based on the claimed bounds (step 17, first line).
+
+     The prover and verifier run the first 5 steps of partially amortized binary
+
+proof (Protocol 1) to generate the commitment E, F, G. cj's in Equation (14)
+
+                                                   15
+Protocol 2 Linear Equation Satisfiability.
+
+PLE(ck, (i, Bi)i=0 S-1, (bi, rb,i)i=0 S-1), VLE(ck, (i, Bi)i=0 S-1)
+
+1: PLE: Run Pbin to obtain E, F, G  Pbin(ck, (Bi)i=0 S-1, (bi, rb,i)i=0 S-1).
+                                                             
+
+2: PLE: Set T3 = max(- i<0 i, i>0 i)p wk.
+
+3: PLE: Compute cj = i=0 S-1 ibi,j , j  [0, k).                                        Dm 2T2 .
+                   d      = dk      = 0, dj
+4:   PLE:  Sample                                   D3T3        j   [1, k),  and  rd
+                     0
+5: PLE: Compute masking values dj = dj - 2dj+1, j  [0, k).
+
+6: PLE: Compute D = Comck((dj )j=0 k-1; rd).
+
+7: PLE  VLE: D, E, F, G.
+
+ 8: VLE  PLE: x  C.
+ 9: PLE: Run Pbin to obtain (gi)i=0 S-1, zg, zb  Pbin(x).
+10: PLE: Set c1 = (ci)i=1 k-1 and d1 = (di)i=1 k-1.
+
+11: PLE: Compute f1 = xc1 + d1.
+
+12: PLE: Run Rej(f1, xc1, 33, T3).
+
+13: PLE: Compute rc = i=0 S-1 irb,i and z = xrc + rd.
+
+14: PLE: Run Rej(z, xrc, 2, T2).
+
+15:  PLE    VLE:   f1  ,  (  gi  )  S-1  ,  zg  ,  zb  ,  z  .
+                                    i=0
+16: VLE: Compute f0 = - j=1 k-1 2j · fj in R and C =                         j=1 k-1 iBi.
+
+17: VLE: Conduct the following checks
+
+                ?                   ?                                             ?        
+
+           f0  Rq;           fj  63T3 d, j  [0, k); z  22T2 md;
+
+                                                    ?
+
+                                    xC + D = Comck((f0, · · · , fk-1); z);
+
+                                                   S-1             S-1            ?
+                             Vbin(ck, (Bi)i=0 , E, F, G, (gi)i=0 , zb) = 1.
+
+are derived in step 3 and their masking values, dj's, are generated in steps 4 and
+5.
+
+    After receiving the challenge x, the prover generates the responses of the
+binary proof based on steps 7 to 11 in Protocol 1. As f , 2k = 0 holds, the
+prover can avoid sending f0 in step 11. In step 13, the randomness for c (i.e.,
+rc) is derived based on rb,i's since cj = i=0 S-1 ibi,j .
+
+    Finally, in step 16, the verifier computes f0 to ensure f , 2k = 0 holds.
+Here she also needs to run on R instead of Rq to avoid the overflow problem
+and returns false if f0 is not in Rq. The commitment of c is derived based on
+Bi's. The check on C and D in Step 17 ensures fi's are properly generated from
+ci's and the last verification Vbin (step 12 in Protocol 1) ensure bi's are binary
+vectors.
+
+    The following theorem ensures the security of Protocol 2. For simplicity, we
+ignore the security requirement of the binary proof part as the balance constraint
+can use a different parameter set.
+
+                                                   16
+Theorem 2. Let LE = 43mdBwp(21+S+1)1/2 and the HMC is hiding and
+LE-binding. Protocol 5 has (S, 3)-special soundness for relations RLE(B md)
+and RLE(LE) and SHVZK with a completeness error 1 - 1/(µ(1)µ(2)µ(3))
+defined in Lemma 6.
+
+Proof. Here we only focus on the SHVZK of c to argue the new encoding scheme
+
+leaks no information. Other parts are similar to standard proofs for lattice-based
+
+-protocols. The full proof is formally given in Appendix C.
+
+     SHVZK of c. The simulator samples f j  D3T3 d for all j  [1, k) and sets
+f       f j                                     f j  - 2fj+1
+     =       =  0.  Then,  it  computes  fj  =                to  build  f  and  sets  f1  =
+  0
+
+(f1, · · · , fk-1). Clearly, f , 2k = 0 holds and f1 is close to the real distribution.
+
+5 Linear Sum for Ring Signatures
+
+5.1 Ring signatures without binary proofs
+
+Binary proofs in ring signatures. In most of existing ring signatures [ESLL19,
+EZS+19,ESZ22], a one-out-of-many proof is used to show a prover (signer) knows
+an opening of a public key Pl in a public key set (P0, · · · , PN-1). The idea for
+this proof is regarding a public key as a commitment to zero. Thus, by con-
+structing a secret binary sequence  = (l,0, · · · , l,N-1) with Hamming weight
+1, a prover proves 1)  is well-formed and 2) i=0 N-1 l,iPi = Pl is a commitment
+to 0. A straightforward solution for the former relation is to use a binary proof
+to show  is a binary vector and i=0 N-1 fi = i=0 N-1(xi + ai) = x for a challenge
+x and some masking values ai's where i=0 N-1 ai = 0. Unfortunately, the proof
+size of this approach is O(N ) due to the size of .
+
+    The efficient logarithmic-size ring signatures "compress"  to several shorter
+delta vectors and allow the verifier to "reconstruct"  with these vectors [ESLL19,
+EZS+19,ESZ22]. Suppose N = k. Write l = (l0, · · · , lk-1) and i = (i0, · · · , ik-1)
+as the representations in base  such that l,i = j=0 k-1 lj,ij . Instead of proving
+that an N -size vector  is well-formed, the prover only needs to prove k-many
+-size vectors, (lj,0, · · · , lj,-1)j=0 k-1, are well-formed, which reduces the proof
+size to O(k).
+
+    One observation is that the binary proof requires a larger parameter set than
+other parts of the proof to ensure security. This is due to 1) the hardness of
+the M-SIS problem and 2) l,i(1 - l,i) = 0 may not hold in Rq for a smaller
+q (the relaxation factor for this constraint is large) [EZS+19, ESZ22]. Though
+the binary proof is simple, its larger parameters indicate a larger proof size.
+Motivated by this, we analyze ring signatures and find proving  being a binary
+sequence is redundant. For example, a signer can prove knowing the opening to
+2Pl instead of Pl without sacrificing security. Generally speaking, it is sufficient
+to relax the one-out-of-many proof by proving the knowledge of an opening
+to i=0 N-1 biPi in ring signatures, where bi's are short and not all bi's are 0
+(relaxing l,i to bi). While reducing binary proof is nice in itself, we would like
+
+                                                   17
+to highlight that it is particularly important for ring signatures. As "the binary
+proof requires a much bigger modulus than (other parts of ) the one-out-of-many
+proof " [EZS+19], avoiding the binary proof fully releases ring signatures from
+the burden of large parameters. Therefore, instead of running a full one-out-of-
+many proof, ring signatures can use a much more efficient linear sum proof with
+a small modulus.
+
+    New ring signatures. Let r be a private key and Pl be the corresponding
+public key in a public key set P = (P0, · · · , PN-1) for some N  1 and 0 
+l < N . The goal of ring signatures is to show the knowledge of a secret key(s)
+corresponding to a public key(s) in P . Based on the idea in Section 5.1, we show
+that proving the knowledge of an opening of a short non-zero linear sum relation
+of the public keys suffices for ring signatures, i.e., knowing some bounded bi's
+and an opening to i=0 N-1 biPi where at least one bi is not zero.
+
+Theorem 3. In ring signatures, if the commitment scheme is computational
+hiding and -binding, then the ring signature scheme described above is unforge-
+able with respect to insider corruption6 in the random oracle model.
+
+Proof. Assume there exists a PPT adversary F that can efficiently forge a ring
+signature with non-negligible probability, we have an adversary A which can
+break the binding property of the commitment scheme, and solve the M-SIS
+problem accordingly.
+
+    A samples r  {-B, · · · , B} and computes an invalid public key pkl =
+Comck(1, 0, · · · , 0; r). Due to the hiding probability of the commitment scheme,
+F cannot distinguish pkl with other public keys. Then, A runs F for (k + 1)
+times to get (k + 1) forgeries with distinct challenges and same A, B, (Ej)j=0 k-1
+based on the forking lemma (pkl is not corrupted). Furthermore, A runs the
+extractor of Protocol 3 with the (k + 1) forgeries to get valid bi = ykbi for
+i  [0, N ) and a valid opening (0; s) of y i=0 N-1 bi ·pki for some public keys. With
+non-negligible probability, we have bl = 0 since F can only make polynomially
+many registration queries to A. Then, A uses all private keys but rl to compute
+s = yk-1s - i=l biri. Since bl = 0, we have bl = 0 (with non-negligible
+probability), and thus we find a binding collision for the HMC, ((bl, 0, · · · , 0); blr)
+and (0; s). Detailed proof is given in Appendix E.
+
+5.2 Unbalanced linear sum relation
+
+It is important to note that the linear sum proof may be difficult to adopt the
+"compressing" technique in [ESLL19,EZS+19,ESZ22] to achieve logarithmic-size
+ring signatures as there may not exist (bj,0, · · · , bj,-1) such that bi = j=0 k-1 bj,ij
+for all i  [0, N ) and finding such a solution can be very inefficient. This brings
+us to the idea of adopting "unbalanced" relations as in relaxed proofs: using a
+stricter relation in proving, but checking the original relation in verifying. For
+
+6 The insider corruption allows the attacker to obtain private keys to some public keys
+   with corruption queries. Accordingly, the signature forgery should not include these
+   "corrupted" public keys in its ring.
+
+                                                   18
+instance, as a linear sum relation is sound for ring signatures and a one-out-of-
+many relation is stricter than the linear sum relation, a prover can use bi = l,i in
+the one-out-of-many relation to generate a proof. The verifier checks the linear
+sum relation instead of the one-out-of-many relation. The unbalanced linear sum
+protocol is similar to the one-out-of-many protocol without the binary proof part,
+which avoids the constraint of bi  {0, 1}. Additionally, to ensure at least one
+bi is not zero, the verifier checks whether b > 0. The unbalanced linear sum
+relations are defined as follows:
+
+Definition 6. The following defines the unbalanced relations for our unbalanced
+linear sum proof, proving RLS and relaxed opening RLS:
+
+RLS(T ) = ((ck, P ), (l, r)) : ,
+       l  [0, N )  r  T  Pl = Comck(0; r)
+                                                       
+                 ((ck, P ), (y, b, r)) :               
+
+RLS(Tb, Tr) = N-1  b > 0  b , i  Tb  r  Tr  y biPi = Comck(0; r) 
+
+                          i=0
+
+ where y is a relaxation factor and T , Tb, and Tr are norm bounds of r, bi, and
+r respectively.
+
+    Though our "unbalanced" relation is derived from relaxed relations, the mo-
+
+tivations behind are different. In our approach, we start from the verifier's side
+
+and show verifying a linear sum proof suffices in ring signatures. To improve the
+
+efficiency, we restrict the prover's relation and require the prover to run under a
+
+one-out-of-many relation. The key idea is to find a strict and efficient relation
+
+for provers. On the other hand, existing relaxed proofs start from the prover's
+
+side and find straightforward soundness proofs do not work. They need to re-
+
+lax the relation on the verifier's side to overcome the complications. The key
+
+idea is to find a relaxed but sound relation for verifiers. Thus we use the term
+
+"unbalanced relations" to distinguish with relaxed relations.
+
+    Logarithmic-size proof. To achieve a logarithmic-size unbalanced linear
+
+sum proof, a prover can directly apply the "compressing" technique in [ESLL19,
+EZS+19]. Here we briefly describe this technique to fill some gaps before showing
+
+the details of the formal protocol. Specifically, the prover finds and commits
+to k-many sequences (lj,0, · · · , lj,-1)j=0 k-1 such that l,i = j=0 k-1 lj,ij for all
+i  [0, N ). After receiving a challenge x, the prover's response contains fj,i =
+xlj,i + aj,i with some masking values aj,i's. Let  = (l0,0, · · · , lk-1,-1), a =
+(a0,0, · · · , ak-1,-1), and f = (f0,0, · · · , fk-1,-1). The prover needs to show 1)
+(lj,0, · · · , lj,-1)'s are short non-zero vectors and are properly committed and
+2) l,i's can be constructed with l,i = j=0 k-1 lj,ij such that i=0 N-1 l,iPi being
+a commitment to zero.
+
+    For the first constraint, the prover shows the following equations hold:
+
+Comck(f ; ) = Comck(x + a; ) = xB + A;
+
+-1     -1   -1       -1                                  (17)
+
+     fj,i = x lj,i + aj,i = x + aj,i,      j  [0, k).
+
+i=0    i=0  i=0      i=0
+
+                 19
+The second equation ensures at least one element in (lj,i)i=0 -1 is not 0 for all
+j's as i=0 -1 fj,i = x + i=0 -1 aj,i implies i=0 -1 lj,i = 1. Moreover, proving 
+
+being "short" is done in the norm check of HMC openings. Besides, the second
+
+equation is not a necessary condition for the linear sum relation. However, based
+
+on the unbalanced relations in Section 5.1, the prover can efficiently show the
+
+second equation holds with a one-out-of-many relation.                    j=0 k-1 fj,ij :
+    For the second constraint, the verifier computes the product pi(x) =
+
+     k-1       k-1
+
+pi(x) = fj,ij = (xlj,ij + aj,ij )
+
+     j=0       j=0                                                        (18)
+
+k-1       k-1                                     k-1
+
+=xk · lj,ij + pi,j · xj = l,ixk + pi,j xj ,
+
+j=0       j=0                                     j=0
+
+where pi,j's are functions of lj,ij 's (i.e., l) and aj,i's. Equation (18) holds for
+all i  [0, N ). As pi,j's are independent of x, the prover can pre-compute pi,j's
+and send Ej = i=0 N-1 pi,jPi to allow the verifier to cancel out the coefficients
+of the terms 1, x, · · · , xk-1 before receiving x (the randomness is omitted here
+for simplicity). For xk part, it can be set to the prover's public key Pl with
+
+   i=0 N-1 l,iPi.
+    Formal protocol. We formally describe our unbalanced linear sum proof
+
+protocol in Protocol 3. Similar to lattice-based -protocols, the prove samples
+
+all masking values from special distributions (steps 2 and 5) and rejects results
+
+that are out-of-bounds (steps 11 and 13). Accordingly, the verifier should check
+
+the norms of the openings based on the claimed bounds (step 16).
+    Steps 3 and 4 generate the masking values aj,i's for lj,i's and ensure i=0 -1 aj,i =
+
+0 (which further ensure i=0 -1(xlj,i + aj,i) = x). pi,j's in step 3 are derived from
+Equation (18).
+
+    Upon receiving the challenge x, the prover generates the responses f1, zb,
+and zr. For f , the prover can avoid sending fj,0's as i=0 -1 fj,i = x holds. In step
+12, zr is the response to randomness in Pl and Ej's based on Equation (18).
+
+    Finally, the verifier computes fj,0 = x - i=1 -1 fj,i for all j  [0, k) as
+   i=0 -1 fj,i = x, which ensures i=0 -1 lj,i = 1 (and further ensures at least one
+element in (lj,0, · · · , lj,-1) is not 0 for all j's). The last two checks ensure that
+   i=0 N-1 l,iPi is a commitment to 0.
+
+Theorem 4. Let LS = (41k)kdk- 12 and LS = (k+1)2+222Bmd2wp+1
+for  = k(k +1)/2 and  = k(k -1)/2, the HMC is hiding and LS-binding. Pro-
+tocol 6 has (k+1)-special soundness for relations RLS(B md) and RLS(LS, L S)
+and SHVZK with a completeness error 1 - 1/(µ(1)µ(2)) defined in Lemma 6.
+
+The proof is given in Appendix D.
+                                              20
+Protocol 3 Unbalanced Linear Sum Proof.
+PPLS(ck, P , (l, r)), VLS(ck, P ) 
+ 1: PLS: Set T1 = p kw and T2 = (wp)kB 2md.
+ 2: PLS: Sample
+
+    ra  D2T2 m ; rb  SBmd; aj,1, · · · , aj,-1  D1T1 , j  [0, k).
+
+3: PLS: Set aj,0 = - i=1 -1 aj,i, j and a = (aj,i)j=0,i=0 k-1,-1.
+
+4: PLS: Compute  = (lj,i)j=0,i=0 k-1,-1 and pi,j 's based on l.
+5: PLS: Sample 0  Dm 2T2 and j  Sm B , j  [0, k)
+6: PLS: Compute the commitments
+
+                         N -1
+
+               Ej = pi,jPj + Comck(0; j), j  [0, k),
+
+                          i=0
+
+                B = Comck(; rb), A = Comck(a; ra).
+
+7:  PLS  VLS:  A,  B  ,  (E  j  )  k-1  .
+                                   j=0
+
+8: VLS  PLS: x  C.
+9: PLS: Set 1 = (lj,i)j=0,i=1 k-1,-1 and a1 = (aj,i)j=0,i=1 k-1,-1.
+
+10: PLS: Compute f1 = x1 + a1.
+
+11: PLS: Run Rej(f1, x1, 1, T1).
+
+12: PLS: Compute zb = xrb + ra and zr = xkr - j=0 k-1 xj j .
+
+13: PLS: Run Rej((zb, zr), (xrb, xkr - j=1 k-1 xj j ), 2, T2).
+
+14: PLS  VLS: f1, zb, zr.                  i=1 -1 fj,i, j  [0, k).
+15: VLS: Compute fj,0 = x -
+
+16: VLS: Conduct the following checks
+
+    ?                                                               ?
+
+    fj,i  21T1 d, j  [0, k), i  [1,); fj,0  21T1 d, j  [0, k);
+
+       ?                                                   ?
+
+    zb, zr  22T2 md;                       xB + A = Comck((f0,0, · · · , fk-1,-1); zb);
+
+       N -1 k-1                            k-1
+
+               ( fj,ij )Pj -                           j?
+
+                                                Ejx = Comck(0; zr).
+
+       i=0 j=0                             j=0
+
+6 RingCT Protocol
+
+6.1 Overview
+
+Since both Protocol 2 and Protocol 3 are public coin, we can use Fiat-Shamir
+heuristic to transform them into non-interactive protocols and build a RingCT
+protocol. We first show how to combine the two proofs and then address some
+additional issues such as the unbalancing problem and double-spending.
+
+                                                   21
+    Combining two proofs. In a RingCT protocol, a spender needs to prove a
+
+transaction is valid and hides the identity of input accounts simultaneously. This
+
+can be achieved by adding decoy accounts into inputs and proving the balance
+
+and linear sum (ring signature) relations in one proof. Note that the binary
+
+proofs for inputs can be reduced as they have been verified as output accounts
+in previous transactions. Let CNKin = (ra,i)i=0 M-1 and CNKout = (rb,i)i=0 S-1 be the
+sets of input and output coin keys respectively (i.e. randomness), CNin = (Ai)i=0 M-1
+and CNout = (Bi)i=0 M-1 be the sets of input and output coins (commitments to
+ai's and bi's, i.e., Ai = Comck(ai; ra,i) and Bi = Comck(bi; rb,i)). Consider
+N M inputs (CNin (j))j=0 N-1 = (Ai(j))i=0,j=0 M-1,N-1, which have M spender's accounts (the
+spender owns the amount values and coin keys at index j = l, (ai(l), ra,i (l))i=0 M-1),
+and (N - 1)M decoy accounts, CNin (j) where j = l. To transfer funds to S output
+accounts, (Bi = Comck(bi, rb,i))i=0 S-1, the spender needs to send an additional
+commitment C and compute public keys (Pj)j=0 N-1 as follows:
+
+     C = Comck(c; rc ),
+
+     S-1        M -1                                              (19)
+
+     Pj = Bi -           Ai(j) - C,  j  [0, N ).
+
+     i=0        i=0
+
+Ideally, we regard Pl as a commitment to zero with the private key (random-
+
+S-1  M -1 (l)            
+ness) r = i=0 rb,i - i=0 ra,i - rc. The spender can further show Pl is a
+
+commitment to zero as in our ring signature scheme, which proves the amount
+
+balance and hides the identity at the same time. Unfortunately, as linear sum
+proof only ensures i=0 N-1 biPi is a commitment to zero instead of each Pi (we use
+
+bi to distinguish with the output amount bi), the above approach will incur an
+
+unbalancing problem. For instance, if the spender owns two input accounts at in-
+dices s and t with a(s) = 2 and a(t) = 1, she can mint b = 4 coins (b = a(s) + a(t))
+
+by setting M = S = 1, bs = 3, and bt = -2. As Ps is a commitment to b - a(s)
+(i.e., 2) and Pt is a commitment to b - a(t) (i.e., 3), bsPs + btPt is a commitment
+
+to 0 (here we use the amounts directly instead of their bits for simplicity). This
+
+is due to the security proof of our ring signatures relies on Pi's being correctly
+generated (i.e., commitments to 0), which may not be true in RingCT as Pi's
+are derived from different accounts. Prior to show our solution, we describe the
+
+linkable version of our ring signature to avoid double spending.
+
+Avoid double-spending. To avoid double-spending, we extend our ring
+
+signature (Protocol 3) to provide linkability by checking the serial number of each
+
+input account to ensure it is not included in previous transactions. This could be
+done by following the blueprint of MatRiCT [EZS+19] and MatRiCT+ [ESZ22].
+
+Consider a new commitment key H. A serial number SN is a public commitment
+
+to zero under H with the signing key r as the randomness, i.e., SN = H · r. At
+
+step 6 of Protocol 3, the prover needs to additionally compute Fj = H · j for
+all j  [0, k). In the verification, the verifier can 1) link the proof with previous
+ones based on SN and 2) check SN is correct with xk · SN - j=0 k-1 xjFj = H · zb.
+
+                         22
+    In a RingCT protocol, each account has an additional account key pair,
+(pk, sk) such that pk = Comrk(0, sk) under a set of different public param-
+eters rk. For each input account, i  [0, M ), the spender places it at index
+l of an N -size ring PKi and runs the above linkable version of Protocol 3,
+PLS(rk, PKi, SNi, (l, ski)). Besides, as described in MatRiCT+ [ESZ22], the link-
+able ring signatures for M input accounts can be aggregated into one with
+
+   i=0 M-1 ipki + Pi as the public keys and i=0 M-1 iski + r as the signing key,
+where i's are challenges. To avoid double-spending, the verifier simply checks
+the serial numbers are distinct and not included in previous transactions.
+
+    Avoiding unbalancing problem. To address the unbalancing problem de-
+scribed above, we show a simple and efficient approach to ensure the spender
+can only use one Pi to run the linear sum proof. Recall the linkable version of
+our unbalanced linear sum proof. The serial number ensures a spender cannot
+1) avoid sending any serial number of her real account and 2) include the serial
+numbers of other's accounts. Thus, the serial number set of a valid transaction
+must be the serial numbers of all real input accounts. Accordingly, the number
+of serial numbers must be HW(b) · S, which reveals how many accounts are used
+as real inputs in our unbalanced linear sum proof. Therefore, to ensure one Pi
+out of an N -size list, the verifier checks the number of serial numbers being S.
+
+    The security of this approach can be derived directly from the prosperities of
+serial numbers. If the count of serial numbers is different from the count of real
+input accounts in a transaction (and causes the unbalancing problem), it either
+excludes the serial numbers of the real accounts or includes the serial numbers
+of others' accounts. Since the serial number and secret key share the same secret
+b to indicate the indices, it cannot pass the verification in either case.
+
+6.2 RingCT functions
+
+We present the full set of algorithms in our RingCT protocol. Consider the case
+with M input amounts (ai)i=0 M-1 and S output amounts (bi)i=0 S-1. The balance
+proof part in RingCT protocols is a special case of linear equation satisfiabil-
+
+ity, where N = S + M , (0, · · · , S-1) = (1, · · · , 1), and (S, · · · , S+M-1) =
+(-1, · · · , -1). Accordingly, Equation (12) can be expressed as
+
+                          S-1  M -1
+
+F (a0, · · · , aM-1, b0, · · · , bS-1) = bi - ai.  (20)
+
+                          i=0  i=0
+
+    Let B be the set of public keys and coin keys of all registered accounts, S be
+the set of serial numbers for spent output accounts, CNKin and CNKout be the sets
+of real input and output coin keys respectively (i.e. randomness), CNin and CNout
+be the sets of real input and output coins (commitments to amount with coin
+
+keys as randomness), SKin and SKout be the sets of real input and output secret
+keys respectively, PKin and PKout be the sets of real input and output public keys
+respectively, SNin be the set of serial numbers of real inputs, CNd and PKd be the
+sets of decoy coins and decoy public keys.
+
+                      23
+    In Protocol 2, denote the initial commitments as CMTLE = (D, E, F, G),
+the prover's response as RSPLE = (f1, (gi)i=0 S-1, z, zg, zb), and CMTLE  = E. In
+                                                                                                   k-1
+Protocol            3,  denote  the  initial    commitment  as   CMTLS     =    (A,  B  ,  (Ej  )  j=0  ),  the
+
+prover's response as RSPLS = (f1, zb, zr), and CMTLS  = (B, (Ej)j=1 k-1).
+
+    · Setup(1): Run G  CKeygen and set ck = G. Run G  CKeygen and
+
+set rk = G. Run H  CKeygen and set sk = H. Choose a hash function
+
+H : {0, 1}  C. Return pp = (ck, rk, sk, H).
+
+    · Mint(pp, v): Sample r  {-B, · · · , B}md and compute Bits(v) = (v0, · · · , vk-1),
+
+B = Comck(v; r). Return (cn, cnk) = (B, r).
+
+    · KeyGen(pp): Sample r  {-B, · · · , B}md and compute P = Comrk(0; r).
+
+Return (pk, sk) = (P, r).
+
+    · SerialGen(pp, sk): Compute SN = Comsk(0; r) where r = sk. Return
+
+SN.
+
+    · Spend(pp, (ai)i=0 M-1, (bi)i=0 S-1, CNin, CNKin, PKin, SKin, SNin, CNd, PKd): Choose
+l  [0, N - 1]. Parse CNin = (Ai(l))i=0 M-1, CNKin = (ra,i (l) )i=0 M-1, PKin = (Pa,i (l))i=0 M-1,
+
+and SKin = (ra,i (l))i=0 M-1. Set Bits(ai) = ai for i  [0, M ) and Bits(bi) = bi for i 
+
+[0, S). Call Mint(pp, bi) = (cni, cnki) = (Bi, rb,i), KeyGen(pp) = (pki, ski) =
+               
+(P  b,i  ,  r  b,i  ),  and  SerialGen(pp, ski)  =  SNi  for  i    [0, S)  for  output     accounts.        Set
+
+CNout = (cni)i=0 S-1, CNKout = (cnki)i=0 S-1, PKout = (pki)i=0 S-1, SKout = (ski)i=0 S-1, and
+SNout = (SNi)i=0 S-1. Set CNd = (Ai(j))i=0,j=0 M-1,N-1 and PKd = (Pa,i (j))i=0,j=0 M-1,N-1 for j = l.
+
+Proceed as follows:
+
+1. Compute  = H(pp, CNin, PKin, SNin, CNd, PKd) as the first challenge in the
+
+   partially amortized binary proof (Protocol 1).
+2. Run PLE(ck, ((1, Bi)i=0 S-1, (-1, Ai)i=0 M-1), ((bi, rb,i)i=0 S-1, (ai, ra,i)i=0 S-1)) to gen-
+
+     erate CMTLE based on the first 7 steps of Protocol 2.                 M -1 (j)
+                                                              S-1
+3. Compute C = Comck(c; rc) and Pj = i=0 Bi - i=0 Ai - C for j 
+
+     [0, N ) in Equation (19).
+
+                                                                   S-1               M -1 (l)               
+4. Set P = (P0, · · · , PN-1). Run PLS(ck, P , (l, i=0 rb,i - i=0 ra,i - rc))
+
+   steps 1 to 7 in Protocol 3 to generate CMTLS.
+5. For each i  [0, M -1], set Pi = (Pa,i (0), · · · , Pa,i (N-1)). Run PLS(rk, Pi, (l, ra,i  ))
+
+   steps 1 to 7 in Protocol 3 to generate CMTLS (i) for all i's.
+6. Additionally compute Fi,j = H · i,j for all i  [0, M - 1] and j  [0, k) at
+
+     step 6 of Protocol 3 (as described in Section 6.1). Set F = (Fi,j)i=0,j=0 M-1,k-1
+
+   and F  = (Fi,j )i=0,j=1 M-1,k-1.
+7. Compute x = H(pp, CNin, PKin, SNin, CNd, PKd, CNout, PKout, SNout, CMTLE,
+
+   (CMTLS (i) )i=0 M-1, CMTLS, F ).
+8. Compute RSPLE by running the remaining steps of PLE (Protocol 2).
+
+9. Compute RSPLS (i) 's and RSPLS by running the remaining steps of PLS for all
+
+     i's (Protocol 3).
+
+10. Set  = (CMTLE  , (CMTLS (i))i=0 M-1, CMTLS  , F , x, RSPLE, (RSPLS (i) )i=0 M-1, RSPLS).
+
+     Return (CKout, CNKout, PKout, SKout, SNout, ).
+
+    · CheckAct(B, PK, CNK): For all pki  PK and cnki  CNK, if all (pki, cnki)'s
+appear in B, output 1. Otherwise, output 0.
+
+                                                    24
+Size (KB)  200                                                                           Size (KB)                                            MatRiCT (w/ range proof)
+                                                                                       30                                                     MatRiCT (w/o range proof)
+                                                                                                                                              This work (under MatRiCT)
+           150                                                                                                                                MatRiCT+
+                                                                                                                                              This work (under MatRiCT+)
+                                                                                       20
+           100
+
+           50                                                                                       10
+
+                     0  10  20             30  40          50                                       0             4  6              8  10
+                                                                                                           2
+
+                            # Inputs (M)                                                                             Ring Size (N)
+
+Fig. 1: Balance proof size. Fig. 2: Ring signature size.
+
+           Time (s)  8                                                                   Time (s)   4                                         MatRiCT: proving
+                     6                                                                              3                                         This work (under Matrict): proving
+                     4                                                                              2                                         MatRiCT+: proving
+                     2                                                                              1                                         This work (under Matrict+): proving
+                     0                                                                              0                                         MatRiCT: verification
+                                                                                                                                              This work (under Matrict): verification
+                               M =1, S =1                                                                  N =10                              MatRiCT+: verification
+                                                                                                                                              This work (under MatRiCT+): verification
+
+                                               M =1, S =2                                                            N =20             N =50
+
+Fig. 3: Time cost of balance Fig. 4: Time cost of ring sig-
+
+proofs.                                                        natures.
+
+    · IsSpent(S, SN): For all SNi  SN, if any SNi appears more than once in SN
+or appears in S, output 1. Otherwise, output 0.
+
+    · Verify(pp, S, CNin, PKin, SNin, CNd, PKd, CNout, PKout, SNout, ): Compute  =
+H(pp, CNin, PKin, SNin, CNd, PKd) as the first challenge in the partially amortized
+binary proof (Protocol 1). Run CheckAct(B, PKin, CNKin). If the output is 0,
+return 0. Run IsSpent(S, SNin). If the output is 1, return 0. Parse  = (CMTLE  ,
+(CMTLS (i))i=0 M-1, CMTLS  , F , x, RSPLE, (RSPLS (i) )i=0 M-1, RSPLS). Proceed as follows:
+
+ 1. Return 0 if |CNin| = M or |PKin| = M or |SNin| = M .
+ 2. Rebuild CMTLE based on the last two verifications in step 12 of Protocol 1
+
+     and the forth verification in step 17 of Protocol 2, (CMTLS (i) )i=0 M-1 and CMTLS
+     based on the forth verification in step 16 of Protocol 3. Rebuild F by setting
+     Fi,0 = xk · SNi - j=1 k-1 xj Fi,j - H · zb,i for all i's.
+ 3. Return 0 if x = H(pp, CNin, PKin, SNin, CNd, PKd, CNout, PKout, SNout, CMTLE,
+     (CMTLS (i) )i=0 M-1, CMTLS, F ), otherwise return 1.
+
+    B and S will be updated once transactions are recorded on the blockchain.
+
+7 Evaluation
+
+Implementation. To evaluate the performance of the proposed proofs, we
+give a reference implementation7 of our approaches in Golang. The underling
+
+7 https://github.com/GoldSaintEagle/RingCT_Implementation
+
+                                                   25
+polynomial ring operations are implemented with LaGo [LJC24]. To compare
+with MatRiCT and MatRiCT+, we evaluate the performance of our approaches
+(as well as MatRiCT and MatRiCT+) under settings: 1 = 2 = 15, B = 1,
+(d, w, p) = (64, 56, 8), q = 249-218+29+1, (n, m) = (29, 60), q = 231-218+23+1,
+and (n, m) = (18, 38) for MatRiCT; and (d, w) = (256, 56), q = 167770241
+( 227), (n, ) = (4, 4), q = 234 - 226 - 27 + 1, and (n, ) = (5, 5) for Ma-
+tRiCT+. Note these settings suffice the 128-bit security of partially amortized
+binary proof when the number of outputs are small ( 2) in our experiments. All
+experiments are performed on a personal laptop equipped with Intel i7-8750H
+2.20GHz CPU and 8GB memory.
+
+    Proof size: balance proof. We first evaluate the performance of our balance
+proof. Referring to [EZS+19, ESZ22], we consider the scenario that requires 64-
+bit precision for amounts (i.e., k = 64) and fix the number of output account
+(S = 1). The balance proof size growth with the number of input accounts is
+depicted in Figure 1. As we do not consider anonymity in our balance proofs,
+the proof size does not increase much with M except when M = 1. This is an
+expected result as M only contributes to the size of proof elements which is
+logarithmic to the proof size. Furthermore, there is a clear burst in MatRiCT
+when M = 3 if we use full range proofs to show the validate of corrector values.
+This problem can be avoided by embedding the range relation in the binary
+proofs of output accounts as with MatRiCT+ (MatRiCT w/o range proof in
+Figure 1). Nevertheless, our approach can save 15% size of MatRiCT (with
+range proof) when M = 1 and more than 50% in other cases, and nearly 20%
+size of MatRiCT+.
+
+    Proof size: ring signature. We further evaluate the performance of our
+ring signature, and compare with MatRiCT [EZS+19] and MatRiCT+ [ESZ22].
+As N is relatively small in existing anonymous cryptocurrencies (e.g., N = 11 in
+Monero), we fix k = 1 and  = N . The signature size growth with the ring size N
+is depicted in Figure 2. Since we set  = N , all approaches scale linearly with the
+ring size. Compared with MatRiCT, our approach reduces about 50% proof size.
+This is contributed by removing the binary proofs, which allows us to efficiently
+run under the smaller parameter set. The improvement is less significant in
+MatRiCT+ settings. This is mainly due to the cyclotomic rings optimization
+decreases the gap between different parameters, i.e., (q, n, )  (234, 4, 4) and
+(q, n, )  (227, 5, 5). Nevertheless, our approach can still save about 15% proof
+size of MatRiCT+.
+
+    Time consumption. Finally, we compare the proving and verification time
+of our approaches with MatRiCT [EZS+19] and MatRiCT+ [ESZ22]. The results
+are depicted in Figure 3. Our inner-product based approach reduces nearly 30%
+proving time of the MatRiCT and 20% of MatRiCT+ as we do not involve ci's
+in binary proofs. Besides, since the commitment of ci's is derived from Ai's and
+Bi's, our approach also reduce the time of committing to corrector values. Fur-
+thermore, our approach reduces about 20% verification time of both MatRiCT
+and MatRiCT+. The main reason is verifying the inner-product relation (step
+11 of Protocol 2) is much more efficient than the balance relation with corrector
+
+                                                   26
+values. Therefore, the efficiency of binary verification is also improved without
+corrector values.
+
+    The performances of ring signatures are depicted in Figure 4. Our unbalanced
+linear sum approach can reduce nearly 15% proving time of MatRiCT and Ma-
+tRiCT+ when N = 50. This is mainly contributed by avoiding the binary proof
+parts in our approach. When N is small, the improvement is less significant as
+the binary proof cost is only a small portion of the whole cost. The improve-
+ment in verification is less significant due to the same reason. Nevertheless, our
+approaches outperform MatRiCT and MatRiCT+ in all settings.
+
+8 Discussion
+
+Security of parameters. Based on Lemma 1, we can find that the security of
+M-SIS increases with n whereas the security of M-LWE increases with m - n.
+Thus, we balance the security aspects to choose parameters such that m 
+2n. Furthermore, MatRiCT [EZS+19] and MatRiCT+ [ESZ22] aim for the root
+Hermite factor of   1.0045 in Equation (2) for both M-LWE and M-SIS,
+which indicates 128-bit post-quantum security [APS15]. Here we show that our
+parameters ensure a same security level.
+
+    Prior to present the results, we show a technique used in [EZS+19] to reduce
+bin by scarifying some completeness (increasing the completeness error).
+
+    In the binary proof of MatRiCT, after generating gi's, the prover and verifier
+further check (gi  (x · 1 - gi))i=0 S-1 be a factor 4d smaller than the theoretical
+bound in Equation (33) (after steps 8 and 12 in Protocol 1). [EZS+19] shows
+these changes can significantly reduce bin while ensuring the completeness error
+less than 1%. Therefore, the norm bound of (s; rf ) becomes
+
+(s; rf ) = 4p2            d3w3  p2k3S34              +  22B2m2(S  +   1)  .    (21)
+
+                                               1
+
+Accordingly, bin becomes
+
+bin = max{BBin, BAmor}
+
+:= max 4p2                d3w3  p2k3S34           +  22B2m2(S  +  1)  ,
+
+                                               1
+
+              2+1SBpw-1md22                                              S-1
+
+                                                     md(S + 1) (wp)i .
+
+                                                                          i=0
+
+Observe that BBin is the bound in MatRiCT (Lemma 5.5 in [EZS+19]) in-
+troduced by the binary constraint (our solution has a smaller bound in this
+
+term since we use the new encoding scheme), and BAmor is introduced by
+our partial amortization technique. Meanwhile, BAmor < BBin when S  2,
+which indicates our parameters satisfy Equation (2). Specifically, when S = 2,
+2bin  2.86 × 1014, which is smaller than min{q, 22 nd log q log }  4.10 × 1014
+in Equation (2).
+
+                                27
+                                       
+    Additionally, 2(2wp)+11 wkS  2.04×109 and 8(w1)2pkSd  3.70×1011
+when S = 2, while q/2  2.81 × 1014, which is greater than both terms. Thus, we
+can safely use the our parameters for binary proofs when S  2, which satisfies
+most cases for confidential transactions.
+    For the linear equation satisfiability, we set 21 = S + M in LE. When S =
+2 and M = 50, we have 2LE  1.34×109, which is smaller than min{q, 22 nd log q log } 
+1.44 × 109 in Equation (2). Thus, the settings satisfy the security of our linear
+equation satisfiability.
+    Lastly, for the unbalanced linear sum proof, we have 2LS  6788 when
+N = 50, which is much smaller than 1.44 × 109 (derived from the left hand size
+of Equation (2)). It also indicates we can use a much smaller parameter set for
+ring signature applications.
+    Compatible with other techniques. As we improve the underlying ZKPs
+of RingCT protocols, our approaches preserve all distinguishing features of Ma-
+tRiCT, such as being compatible with extractable commitment techniques, which
+allows one to design an auditable RingCT protocol by placing a "mini trapdoor"
+in HMC (enumerating all possible values to recover the committed message).
+    Besides MatRiCT, other techniques in MatRiCT+ [ESZ22] to optimize the
+underlying cyclotomic rings can also be applied in our approaches. Specifically,
+a new CRT-packing technique is proposed in power-of-2 cyclotomic rings to
+reduce the modulus with binary CRT slots (and reduce the commitment size
+accordingly). Furthermore, MatRiCT+ optimizes challenges in cyclotomic rings
+to reduce their Hamming weights [ESZ22]. As both techniques are "general and
+of independent interest for lattice-based proof systems" [ESZ22], our approaches
+can regard them as optimized settings to further improve efficiency.
+    Discrete logarithm settings and other applications. Since our tech-
+niques do not rely on lattice settings, the results are believed to be of independent
+interest for RingCT protocols in a generic setting and other applications.
+    Partially amortized binary proof can be directly applied in discrete logarithm
+settings to batch zb,i's regardless of S since the norm checks are no longer needed.
+    Partial amortization extends the amortization technique in [ACF21] which
+can benefit other applications with non-homomorphic constraints (e.g., reduce
+the cost of responses to randomness in many -protocols).
+    Linear equation satisfiability is compatible with bit-based commitments with
+Equation (13) (commit to the bits of the secret instead of its value). It also has
+a wider application, such as in the R1CS check to build SNARKs. To prove the
+knowledge of z and zA such that A · z = zA, one can run our linear equation
+satisfiability by setting zA,i - j Ai,jzj = 0.
+    The new encoding scheme allows a prover to ensure both d, t = 0 and the
+encoded result are short, which can be used with smaller parameters to reduce
+the proof size in lattice settings as mentioned in Section 4.2.
+    Unbalanced linear sum proof can also be applied in discrete logarithm set-
+tings directly to improve their performance of ring signatures by removing the
+binary proof part. Note that under the discrete logarithm assumption, bi's do
+not necessarily have to be short. Besides RingCT protocols, other ring-signature-
+
+                                                   28
+based applications can also be benefited. For instance, in an anonymous e-voting,
+
+voters can use our linkable ring signature to sign their votes. The tallying cen-
+
+ter verifies the signatures to ensure validity and avoid multiple voting without
+
+knowing the identities of the voters.
+    First, an O( N )-size commitment scheme is proposed in [BBC+18] by en-
+
+coding N -many secrets into S where v = l = O( N ). Unfortunately, when
+
+adopting this approach, the f , 2k in Equation (15) cannot be calculated di-
+
+rectly as Z will "batch" some fi's when computing S · C. For instance, consider
+the first element in Z, z0,0 = i=0 l-1 s0,i · ci,0 + y0,0. As f0 = s0,0 · c0,0 + y0,0,
+we have 20 · z0,0 = 20 · f0 + 20 · ( i=1 l-1 s0,i · ci,0) = 20 · f0 + 20 · e0. Therefore,
+it is important to allow the verifier to cancel out i=0 k-1 2i · ei without leaking
+any information when computing f , 2k. The same issue occurs in ring signa-
+
+tures when computing i=0 -1 fj,i in Equation (17) and j=0 k-1 flj,ij in Equation
+
+(18). The latter one is a much thornier problem when using zi,j's to compute
+
+j=0 k-1 fj,ij . Second, Bootle et al. show the proof size of a -protocol can be
+
+reduced  to  O(N    1    with  d-levelled  commitments  or  O(log2(N ))  with  Bullet-
+
+                  d+1 )
+
+proofs folding [BLNS20]. Though the result is promising, we find it is hard to
+
+be applied in our approaches due to the same reasons above. Besides, the sizes
+
+of the extracted solutions (denoted by "slack" in [BLNS20]) also increase.
+
+Open problems. Though our partial amortization technique works in most
+
+RingCT cases, directly applying it with a larger S requires larger parameters,
+
+which hinders from a wider application. It is very useful to improve the amor-
+
+tization technique for a larger S. Besides, our ring signature approach avoids
+
+the binary proof part based on the fact that a one-out-of-many relation is not
+
+a necessary condition for ring signatures. An interesting question is finding the
+
+sufficient and necessary condition for ring signatures, which may further avoid
+
+unnecessary parts of our linear sum proof for a better efficiency. Finally, the
+
+linear sum relation yields a "many-out-of-many" relation [Dia20]. Unlike [Dia20]
+
+which generates many public key index from a single secret l with permutations,
+
+the linear sum relation maps bi's to Pi's directly. Thus, logarithmic-size linear
+
+sum proofs seem promising solutions.
+
+                                           29
+Acknowledgment
+
+We gratefully acknowledge Dr. Xingye LU from the University of Hong Kong for
+the helpful technical discussions about lattice-based cryptography, Dr. Zuoxia
+Yu from the University of Wollongong and Dr. Aoning HU from the Southeast
+University for the discussion about ring signatures, as well as Dr. Muhammed
+Esgin from Monash University for the discussion of MatRiCT and pointing
+out some misleading parts. This research is partially supported by HK RGC
+GRF PolyU 15216721/Q86A, 15207522/Q93W, 15209822, and NSFC Youth
+62302418/ZGJV.
+
+References
+
+ACF21.   Thomas Attema, Ronald Cramer, and Serge Fehr. Compressing Proofs of k-
+APS15.   out-of-n Partial Knowledge. In Proc. of the Annual International Cryptology
+BBB+18.  Conference (CRYPTO). Springer, 2021.
+BBC+18.  Martin R Albrecht, Rachel Player, and Sam Scott. On the Concrete Hard-
+BCC+15.  ness of Learning With Errors. In Journal of Mathematical Cryptology, 2015.
+BCC+16.  Benedikt Bu¨nz, Jonathan Bootle, Dan Boneh, Andrew Poelstra, Pieter
+         Wuille, and Greg Maxwell. Bulletproofs: Short Proofs for Confidential
+BDL+18.  Transactions and More. In Proc. of the IEEE Symposium on Security and
+BLNS20.  Privacy (Oakland). IEEE, 2018.
+Dia20.   Carsten Baum, Jonathan Bootle, Andrea Cerulli, Rafa¨el Del Pino, Jens
+DPLS18.  Groth, and Vadim Lyubashevsky. Sub-linear Lattice-based Zero-knowledge
+         Arguments for Arithmetic Circuits. In Proc. of the Annual International
+         Cryptology Conference (CRYPTO). Springer, 2018.
+         Jonathan Bootle, Andrea Cerulli, Pyrros Chaidos, Essam Ghadafi, Jens
+         Groth, and Christophe Petit. Short Accountable Ring Signatures Based
+         on DDH. In Proc. of the European Symposium on Research in Computer
+         Security (ESORICS). Springer, 2015.
+         Jonathan Bootle, Andrea Cerulli, Pyrros Chaidos, Jens Groth, and
+         Christophe Petit. Efficient Zero-Knowledge Arguments for Arithmetic Cir-
+         cuits in the Discrete Log Setting. In Proc. of the Annual International
+         Conference on the Theory and Applications of Cryptographic Techniques
+         (EUROCRYPT). Springer, 2016.
+         Carsten Baum, Ivan Damg°ard, Vadim Lyubashevsky, Sabine Oechsner, and
+         Chris Peikert. More Efficient Commitments from Structured Lattice As-
+         sumptions. In Proc. of the International Conference on Security and Cryp-
+         tography for Networks (SCN). Springer, 2018.
+         Jonathan Bootle, Vadim Lyubashevsky, Ngoc Khanh Nguyen, and Gregor
+         Seiler. A Non-PCP Approach to Succinct Quantum-safe Zero-knowledge.
+         In Proc. of the Annual International Cryptology Conference (CRYPTO).
+         Springer, 2020.
+         Benjamin E Diamond. "Many-out-of-Many" Proofs with Applications to
+         Anonymous Zether. In Proc. of the IEEE Symposium on Security and Pri-
+         vacy (Oakland). IEEE, 2020.
+         Rafa¨el Del Pino, Vadim Lyubashevsky, and Gregor Seiler. Lattice-Based
+         Group Signatures and Zero-Knowledge Proofs of Automorphism Stability.
+
+            30
+ESLL19.  In Proc. of the ACM Conference on Computer & Communications Security
+ESS+19.  (CCS). ACM, 2018.
+ESZ22.   Muhammed F Esgin, Ron Steinfeld, Joseph K Liu, and Dongxi Liu. Lattice-
+EZS+19.  Based Zero-Knowledge Proofs: New Techniques for Shorter and Faster Con-
+GK15.    structions and Applications. In Proc. of the Annual International Cryptology
+GQZ+24.  Conference (CRYPTO). Springer, 2019.
+Gro16.   Muhammed F Esgin, Ron Steinfeld, Amin Sakzad, Joseph K Liu, and
+GWC19.   Dongxi Liu. Short Lattice-Based One-Out-of-Many Proofs and Applica-
+LAZ19.   tions to Ring Signatures. In Proc. of the International Conference on Ap-
+LJC24.   plied Cryptography and Network Security (ACNS). Springer, 2019.
+LLNW16.  Muhammed F Esgin, Ron Steinfeld, and Raymond K Zhao. MatRiCT+:
+         More Efficient Post-Quantum Private Blockchain Payments. In Proc. of the
+LN22.    IEEE Symposium on Security and Privacy (Oakland), 2022.
+LS15.    Muhammed F Esgin, Raymond K Zhao, Ron Steinfeld, Joseph K Liu, and
+Lyu12.   Dongxi Liu. MatRiCT: Efficient, Scalable and Post-Quantum Blockchain
+         Confidential Transactions Protocol. In Proc. of the ACM Conference on
+         Computer & Communications Security (CCS). ACM, 2019.
+         Jens Groth and Markulf Kohlweiss. One-Out-of-Many Proofs: Or How to
+         Leak a Secret and Spend a Coin. In Proc. of the Annual International
+         Conference on the Theory and Applications of Cryptographic Techniques
+         (EUROCRYPT). Springer, 2015.
+         Shang Gao, Chen Qian, Tianyu Zheng, Yu Guo, and Bin Xiao. -Check:
+         Compressed -protocol Theory from Sum-check. IACR Cryptology ePrint
+         Archive, 2024.
+         Jens Groth. On the Size of Pairing-based Non-Interactive Arguments. In
+         Proc. of the Annual International Conference on the Theory and Applica-
+         tions of Cryptographic Techniques (EUROCRYPT). Springer, 2016.
+         Ariel Gabizon, Zachary J Williamson, and Oana Ciobotaru. PLONK: Per-
+         mutations over Lagrange-bases for Oecumenical Noninteractive Arguments
+         of Knowledge. IACR Cryptology ePrint Archive, 2019.
+         Xingye Lu, Man Ho Au, and Zhenfei Zhang. Raptor: A Practical Lattice-
+         Based (Linkable) Ring Signature. In Proc. of the International Conference
+         on Applied Cryptography and Network Security (ACNS). Springer, 2019.
+         Shaohua Li, Philipp Jovanovic, and ChristianMct. lago. https://github.
+         com/dedis/lago, 2024.
+         Beno^it Libert, San Ling, Khoa Nguyen, and Huaxiong Wang. Zero-
+         Knowledge Arguments for Lattice-Based Accumulators: Logarithmic-Size
+         Ring Signatures and Group Signatures without Trapdoors. In Proc. of the
+         Annual International Conference on the Theory and Applications of Cryp-
+         tographic Techniques (EUROCRYPT). Springer, 2016.
+         Vadim Lyubashevsky and Ngoc Khanh Nguyen. BLOOM: Bimodal Lat-
+         tice One-out-of-Many Proofs and Applications. In Proc. of the Annual In-
+         ternational Conference on the Theory and Application of Cryptology and
+         Information Security (ASIACRYPT), pages 95-125. Springer, 2022.
+         Adeline Langlois and Damien Stehl´e. Worst-Case to Average-Case Reduc-
+         tions for Module Lattices. In Designs, Codes and Cryptography. Springer,
+         2015.
+         Vadim Lyubashevsky. Lattice Signatures Without Trapdoors. In Proc.
+         of the Annual International Conference on the Theory and Applications of
+         Cryptographic Techniques (EUROCRYPT). Springer, 2012.
+
+         31
+MR09.    Daniele Micciancio and Oded Regev. Lattice-based Cryptography. In Post-
+Noe15.   quantum cryptography, pages 147-191. Springer, 2009.
+24a.     Shen Noether. Ring Signature Confidential Transactions for Monero. IACR
+24b.     Cryptology ePrint Archive, 2015.
+RST01.   Hash Team. Hcash. https://h.cash/, 2024.
+SALY17.  Monero Project. Monero. https://www.getmonero.org/, 2024.
+         Ronald L Rivest, Adi Shamir, and Yael Tauman. How to Leak a Secret. In
+SCG+14.  Proc. of the Annual International Conference on the Theory and Application
+         of Cryptology and Information Security (ASIACRYPT). Springer, 2001.
+TSS+18.  Shi-Feng Sun, Man Ho Au, Joseph K Liu, and Tsz Hon Yuen. RingCT
+         2.0: A Compact Accumulator-Based (Linkable Ring Signature) Protocol for
+YAL+17.  Blockchain Cryptocurrency Monero. In Proc. of the European Symposium
+         on Research in Computer Security (ESORICS). Springer, 2017.
+ZGSX23.  Eli Ben Sasson, Alessandro Chiesa, Christina Garman, Matthew Green, Ian
+         Miers, Eran Tromer, and Madars Virza. Zerocash: Decentralized Anony-
+         mous Payments from Bitcoin. In Proc. of the IEEE Symposium on Security
+         and Privacy (Oakland). IEEE, 2014.
+         Wilson Abel Alberto Torres, Ron Steinfeld, Amin Sakzad, Joseph K Liu,
+         Veronika Kuchta, Nandita Bhattacharjee, Man Ho Au, and Jacob Cheng.
+         Post-Quantum One-Time Linkable Ring Signature and Application to Ring
+         Confidential Transactions in Blockchain (Lattice RingCT v1. 0). In Proc. of
+         the Australasian Conference on Information Security and Privacy (ACISP).
+         Springer, 2018.
+         Rupeng Yang, Man Ho Au, Junzuo Lai, Qiuliang Xu, and Zuoxia Yu.
+         Lattice-Based Techniques for Accountable Anonymity: Composition of Ab-
+         stract Stern's Protocols and Weak PRF with Efficient Protocols from LWR.
+         IACR Cryptology ePrint Archive, 2017.
+         Tianyu Zheng, Shang Gao, Yubo Song, and Bin Xiao. Leaking Arbitrarily
+         Many Secrets: Any-out-of-Many Proofs and Applications to RingCT Proto-
+         cols. In Proc. of the IEEE Symposium on Security and Privacy (Oakland).
+         IEEE, 2023.
+
+         32
+A Useful Lemmas
+
+Lemma        3.    (Lemma  4.4      in  [Lyu12])  Let     Ds   be  the  Normal       distribution  over
+
+                                                             
+Zs with standard deviation . Then we have:
+
+   - For any k > 0, Pr[|z| > k; z  D]  2e-k2/2.
+                                           
+   -  For    any   k > 1,  Pr[z > k s; z        Ds ] < kses(1-k2)/2.
+
+                                                       
+
+Lemma 4. (Lemma 5 in [ESLL19]) In Equation (6), the following holds for
+ = 2 k(k-1) :
+
+                          mk  d(k + 1)(2p) w-1 · max fi,
+                                                                    i (22)
+
+                           rk  d(k + 1)(2p) w-1 · max zi.
+
+                                                                                                  i
+
+Lemma 5. (Lemma 8 in [ESLL19]) For any f, g  R = Z[X]/(Xd + 1), we
+have the following relations:
+
+              
+ - f   d · f ,
+ - f   f 1  d · f ,
+ - f · g  d · f  · g,
+
+ - f · g  f  · g,
+ - f · g  f 1 · g,
+ -  i=1 n fi  ( i=1 n-1 fi1) · fn.
+
+Lemma 6. (Theorem 4.6 in [Lyu12]) Let h be a probability distribution
+
+over V  Zs where s  1 and the norm of all elements is less than T . Let
+                                                                                     Ds
+c     h  and       >  0.   Considering     an  algorithm  that  samples         y         and  outputs
+                                                                                        
+
+Rej(z, c, , T ) for z = y + c. The probability that the algorithm outputs 1 is
+
+within 2-100 of 1/µ() where µ() = e12/+1/(22). When the output is 1, the
+
+statistical  distance      between  the  distribution  of  z   and     Ds   is  at  most  2-100.
+
+                                                                          
+
+Lemma        7.    Considering independent vectors y1, · · ·        ,  ys  with    distributions     d  ,  ·  ·  ·  ,     d
+
+                                                                                                  D1                   Ds
+for d  1. If i   (Zd)/  for all i  [1, s] where  (Zd) is a smoothing pa-
+rameter of Zd, the distribution of si=1 yi is statistically close to Dd s 2 . i=1 i
+
+      In particular, we have the distribution of i=1 s yi is statistically close to
+Dds             d     Dd                                                                          i=1 s yi
+         if        =       (Lemma       9  in  [ESLL19])       and  the     distribution  of
+             Di          
+
+is statistically close to Dd si=1 2i if Ddi = Dd  2i for all i  [1, s].
+
+                                               33
+B Proof of Theorem 1
+
+Proof. Completeness: Based on Lemma 6, the prover responds with probability
+1/(µ(1)µ(2)). As there are at most kS-many 1's in (bi)i=0 S-1 and HW (x) = w,
+we have at most wkS non-zero elements in (xbi)i=0 S-1. Since x = p, we the
+following relation when S  2:
+
+                                                                                            (23)
+
+                          x(b0, · · · , bS-1)  p 2wk = T1.
+
+Furthermore, we have
+
+                                                                                            (24)
+
+              x(re, rb,0, · · · , rb,S-1)  Bwp 3md = T2.
+
+    Therefore, based on Lemma 6, the distributions of gi,j's and zg, (zb,i)i=0 S-1
+are statistically close to D1T1 d and D2T2 md respectively. Except with negligible
+probability, for all i  [0, S) and j  [0, k), we have the following relations based
+
+on Lemma 3:
+
+                                                                                            (25)
+
+              gi,j  2(1T1) d, zg  2(2T2) md,
+
+which satisfy the first two steps of verification.
+    Finally, since zb = i=0 S-1 izb,i, we have
+
+              zb  (1 + )zb,i  zb,i + zb,i
+
+                                                                                            (26)
+
+               md (1 + ) · zb,i  2md2T2(wp + 1).
+
+(S, 3)-special soundness: We discus the case when S  2. The extractor
+
+first extracts the relaxed opening of yBi's when provided with the openings of
+y i=0 S-1 iBi for S different  in the first layer of the extraction tree, where
+
+y is a relaxation factor derived from the second layer. Then, for each node in
+the first layer, it extractors the relaxed openings of E, F, i=0 S-1 iBi, G with 3
+
+different x (as the second layer) by fixing the  and commitments. To maintain
+
+consistency in our proof, we first describe the extractor's operation in the second
+layer, which derives the relaxed openings of i=0 S-1 iBi and the corresponding
+
+relaxation factor y used in the first layer.
+
+Extractor in the second layer. Given 3 distinct challenges (x, x, x), we have
+
+3 accepted transcripts. We first consider the constraint of x i=0 S-1 iBi + G =
+         S-1
+Comck (  i=0   i gi ;  zb).  Taking  two  transcripts  of  x  and         x,      we  have
+
+                             S-1                       S-1
+
+                       x iBi + G = Comck( igi; zb),                                         (27)
+                                                                                            (28)
+                             i=0                       i=0
+
+                             S-1                       S-1
+
+                       x          iBi + G = Comck(            i  g     ;  zb  ).
+                                                                    i
+
+                             i=0                       i=0
+
+                                          34
+Subtracting Equation (28) from Equation (27), we get
+
+                               S-1                           S-1
+
+                          (x - x) iBi = Comck( i(gi - gi); zb - zb ).                                         (29)
+
+                               i=0                           i=0
+
+Denote y = x - x, bi = gi - gi, and rb = zb - zb . We extract an opening
+( i=0 S-1 ibi; rb) to y i=0 S-1 iBi, where rb  4md2T2(wp + 1). Taking the
+opening to Equation (27), we have
+
+                               S-1                           S-1
+
+                   yG = yComck( igi; zb) - x iyBi
+
+                               i=0                           i=0
+
+                          S-1                                                                S-1
+
+            =Comck( i(xgi - xgi); xzb - xzb) := Comck( it^i; r^t).
+
+                          i=0                                                                i=0
+
+which gives an opening (            S-1   i t^i ;  r^t)  to  yG   where     r^t              4wpmd2 T2 (wp + 1).
+                                    i=0
+
+Based on the bin-binding property of the commitment scheme, the extractor
+cannot extract new valid openings for y i=0 S-1 iBi and yG. Thus, the extracted
+openings are also valid for the third transcript of x.
+
+    For the constraint of xE + F = Comck(h; zg) where h = (gi  (x · 1 - gi))i=0 S-1,
+taking transcripts of (x, x) from the three transcripts, we have 2 accepted re-
+
+sponses, (h; zg) and (h; zg ) with the same inputs and commitments such that
+
+                                    xE + F = Comck(h; zg),                                                    (30)
+
+                                    xE + F = Comck(h; zg ).                                                   (31)
+
+Using the same extraction approach, we can derive the opening yE = Comck(h-
+
+h  ;  z  g  -z     )  :=  Comck(e; re) and yF      =  Comck       (x  h  -  x    h;  x  z    -x    zg  )  :=  Comck(s; rf )
+                g
+                                                                                          g
+
+such that yh = xe + s. (s; rf ) has a larger norm bound (without loss of gener-
+
+ality, assume (xh, xzg )  (xh, xzg)):
+
+                          (s; rf ) = (xh, xzg ) - (xh, xzg)  2(xh, xzg )
+
+                                                                  2              2                            (32)
+                      2p dw · (h , zg) = 2p dw(h  + zg ).
+
+We further bound x-gj,i by gj,i since x is a much smaller term to compute
+h2 for simplicity:
+
+                                     k-1 S-1
+
+                               h2 =                   dx - gj,i2gj,i2
+
+                                             j=0 i=0                                                          (33)
+
+                                            
+                          dkS(2(1T1) d)4 = 128(dk)3(21p2w)2.
+
+      Taking Equation (33) into Equation (32), we have
+                                                                                 
+
+                  (s; rf )  2p dw 128(dk)3(21p2w)2 + (22T2 md)2
+
+                      =4p2 d3w3 32dp2k341 + 322B2m2  bin,
+
+                                                         35
+which implies valid openings for yE and yF . Based on the bin-binding property
+of the HMC, the extractor cannot extract new valid openings for yE and yF .
+Therefore, the extracted openings are also valid for the third transcript of x.
+
+    Extractor in the first layer. We show how to extract relaxed openings of
+yBi's when given the openings of i=0 S-1 iyBi with S distinct . When S = 1,
+
+Equation (29) implies an opening (b0; rb) to yB0 directly, which allows us to set
+the relaxation factor to y = 1. When S = 2, given 2 distinct challenges,  and
+, we have 2 accepted responses, (b0 + b1, rb) and (b0 + b1, rb ). Accordingly,
+we have
+
+                             yB0 + yB1 = Comck(b0 + b1; rb),                                  (34)
+
+                         yB0 + yB1 = Comck(b0 + b1; rb ).                                     (35)
+
+Let y =  - . Subtracting Equation (35) from Equation (34), we get
+
+                  y yB1 = Comck(y b1; rb - rb ) := Comck(b^1; r^b,1),
+
+which gives an opening (b^1; r^b,1) to yyB1. Tanking the opening to Equation
+(35), we get
+
+                    y yB0 = y Comck(b0 + b1; rb) - y yB1
+                                                                                               (36)
+
+                  =Comck(y b0; rb - rb) := Comck(b^0; r^b,0).
+
+    Since r^b,0 in S = 2 is larger than that in S = 1 and r^b,0 > r^b,1 when
+S = 2, we only analyze the bound of r^b,0 in S = 2 case. Without loss of
+generality, assume rb  rb  and zb  zb . We have
+
+                     r^b,0 = rb - rb  2rb = 2(zb - zb )
+                   4zb  8mdwp2T2 = 8mdw2p2   (37) 2B 3md,
+
+    Binary relation. Finally, we show the extracted openings imply the binary
+relation. Taking the opening ( S-1 i=0 it^i; r^t) to yG, based on the last step of
+
+verification, we have
+
+                  S-1                 S-1          S-1       S-1
+
+               y y igi = x ib^i + iti = i(xb^i + y t^i).                                      (38)
+
+                  i=0                 i=0               i=0  i=0
+
+Though different  generate different G's, the bin-binding property of the com-
+mitment scheme avoids extracting different t^i's such that Comck( S-1 i=0 it^i; r^t)
+(i.e., different t^i's result in different b^i's which break the bin-binding prop-
+
+erty). Thus, Equation (38) also holds for S different , which indicates yygi =
+
+xb^i + y t^i.
+
+Recall  h      =  (gi    (x  ·  1  -  gi  ))  S-1  and  the  openings  of  yE  and  yF ,  we  have  the
+                                              i=0
+
+following relations in R for all i  [0, S) and j  [0, k):
+
+                         yhi,j = y(gi,j (x - gi,j )) = xei,j + si,j .                         (39)
+
+                                                   36
+More precisely, we expected Equation (39) holds in Rq, which requires us to
+prove
+
+                   y ygi,j = x^bi,j + y t^i,j                       in Rq,      (40)
+          ygi,j (x - gi,j ) = xe^i,j + s^i,j
+                                                                    in Rq.      (41)
+
+For Equation (40), we have the norm bound
+
+            y ygi,j   y1 · y gi,j   y1 · y 1 · gi,j 
+                                                    
+
+          2wp · 2wp · 21T1 = 2(2wp)21 2wk.
+
+For Equation (41), we have
+
+          ygi,j (x - gi,j )  y1 · gi,j (x - gi,j )                            
+                                                       
+y1 · gi,j · x - gi,j  2wp · 21T1 d · (p w + 21T1 d)
+                             
+2wp · 21T1 d · 21T1 d = 16(w1)2pkd.
+
+Therefore, we have ygi,j(x - gi,j) > y ygi,j. Since q/2 > 16(w1)2pkd,
+we have both Equation (40) and Equation (41) hold on Rq, which implies Equa-
+tion (39) holds in Rq. Accordingly, we have:
+
+            y2y(xei,j + si,j ) = y2y(ygi,j (x - gi,j ))                         (42)
+          =y ygi,j (xy y - y ygi,j )
+          =(xbi,j + y ti,j )(xy y - xbi,j - y ti,j )
+          =x2 bi,j (y y - bi,j ) + x ti,j (y y - 2bi,j ) - y2ti,j 2 ,
+
+and thus
+
+            x2 bi,j (y y - bi,j ) + x ti,j (y y - 2bi,j ) - y2yei,j             (43)
+          + - y2ti,j 2 - y2ysi,j = 0,
+
+Since Equation (43) holds for x, x, and x, we have the following system in
+
+R (instead of Rq):
+
+          1 x x2   -y2ti,j 2 - y2ysi,j 
+          1                                             2
+             x      x2    ·  ti,j (y y  -  2bi,j )  -  y yei,j   =  0  in R.    (44)
+
+          1 x x2             bi,j (y y - bi,j )
+
+For the last row of Equation (44), we have
+
+          (x - x)(x - x)(x - x)bi,j(y y - bi,j) = 0 in R.                       (45)
+
+Since Equation (45) holds in R, at least one factor it must be zero. As challenges
+
+are distinct, we have bi,j = 0 or bi,j = y y, i.e., bi,j = y ybi,j for bi,j  {0, 1}.
+Thus, all bi's are binary vectors.
+
+                                           37
+    SHVZK: Assume the protocol is not aborted. The simulator samples rb 
+{-B, · · · , B}md, gi,j  D1T1 d for all i  [0, S) and j  [0, k), zg, (zb,i)i=0 S-1 
+D2T2 md , and sets E = Comck(0; rb). Then, given  and x, it computes F =
+Comck((gi,j (x - gi,j ))i=0,j=0 S-1,k-1; zg) - xE, and G =
+Comck( i=0 S-1 igi; zb) - x i=0 S-1 iBi. Obviously, the simulated transcript will
+be an accepted one. Based on Lemma 3, the distributions of (gi,j)i=0,j=0 S-1,k-1, zg,
+zb are statistically close to the real distributions. The simulated distributions
+
+of D, F, G are the same as the real distributions. Due to the hiding property of
+
+the commitment scheme, the distribution E is computationally indistinguishable
+
+from the real case.
+
+C Proof of Theorem 4
+
+Proof. Completeness: Based on the definition of cj, we have c 
+
+max(- i<0 i, i>0 i). Let c = (c0, · · · , ck-1). As there are at most k
+non-zero elements in c and HW (x) = w, xc has at most wk non-zero elements.
+
+Thus,
+
+                                   
+
+           xc  max(- i, i) · p wk = T3.                         (46)
+
+                      i<0 i>0
+
+Let  = (0, · · · , S-1). Based on Lemma 5, we have
+
+                 S-1          S-1
+
+           rc =       irb,i        |i| · rb,i                   (47)
+
+            i=0               i=0
+
+                                 
+
+            md · rb,i · 1  B md1,
+
+and thus,
+
+  x(rc, re, rb,0, · · · , rb,S-1) = (xrc2 + x(re, rb,0, · · · , rb,S-1)2)1/2
+                                                                                                (48)
+
+Bwp md(21 + S + 1) = T2.
+
+    Therefore, based on Lemma 6, the distributions of fj's and z are statistically
+
+close to D3T3 d and D2T2 md respectively. Except with negligible probability, we
+have the following relations for all j  [0, k) based on Lemma 3:
+
+                                                                (49)
+
+           fj  6(3T3) d, z  2(2T2) md.
+
+Other parts can be derived from the completeness proof of the partially amor-
+tized binary proof.
+
+    (S, 3)-special soundness: As the binary constraint is ensured by the par-
+tially amortized binary proof, we only focus on the linear equation constraint
+F (b0, · · · , bS-1) = 0. With the transcripts of 3 different challenges (x, x, x),
+the extractor conducts additional work in the second layer of the extraction tree
+as follows.
+
+                        38
+    Taking 2 transcripts of (x, x), we have the accepted responses (f1, g, z, zg, zb)
+and (f1 , g, z, zg , zb ) with the same commitments (Bi)i=0 S-1, D, E, F, G. Set C =
+
+   i=0 S-1 iBi. Compute f0 = - j=1 k-1 2j · fj on R and rebuild f = (f0, · · · fk-1).
+
+Obviously, we have f , 2k = 0 (so does f ). Taking (f , z) and (f , z) we have
+
+               xC + D = Comck(f ; z), xC + D = Comck(f ; z),                                    (50)
+
+Subtracting the two equations, we get
+
+               (x - x)C = Comck(f - f ; z - z) := Comck(c; rc).                                 (51)
+
+Setting y = x - x as the relaxation factor, we extract a valid opening (c; rc) to
+yC where rc  4(2T2) md. Thus, we prove the claimed bound for RLE.
+
+    Taking Equation (51), we have
+
+               yD = y(xC + D) - xyC = Comck(yf - xc; yz - xrc)
+                    = Comck(xf  - xf ; xz - xz) := Comck(d; rd). (52)
+
+Based onthe definition of c and d, we have yf = xc + d where r^d 
+4wp2T2 md. Based on the bin-binding property of the HMC, the extractor
+cannot extract new valid openings for yC and yD. Therefore, the extracted
+openings are also valid for the third transcript of x.
+
+    As we compute f0 on R instead of Rq, we have yf , 2k = 0, and thus
+xc, 2k + d, 2k = 0. Based on the LE-binding property of the commitment
+scheme, the PPT prover cannot extract a new valid opening of yC and yD with
+non-negligible probability. Thus, xc, 2k + d, 2k = 0 also holds, which implies
+c, 2k = 0. Considering the definition of C, we have
+
+                 S-1                                 S-1  S-1
+
+                 C = iBi = Comck( ibi; irb,i),                                                  (53)
+
+                 i=0                                 i=0  i=0
+
+and thus y i=0 S-1 ibi, 2k = c, 2k = 0, which implies i=0 S-1 i · 2k, bi =
+
+F (b0, · · · , bS-1) = 0. Therefore, we prove the F (b0, · · · , bS-1) = 0 relation in
+RLE.
+
+    Combining with the result of (S, 3)-special soundness in partially amortized
+
+binary proof, the linear equation satisfiability also has (S, 3)-special soundness.
+
+    SHVZK: Assume the protocol is not aborted. By calling the simulator of the
+
+partially amortized binary proof, we get (, E, F, G, x, (gi)i=0 S-1, zb). Additionally,
+                 Dmd 2T2 , f j    D3 T3 d                                   f       f j
+we  sample  z                              for  all  j    [1, k)  and  set       =       =  0.  Then,
+                                                                              0
+we compute fj = f j - 2f j+1 to build f and set f1 = (f1, · · · , fk-1). Given x, we
+
+compute D = Comck(f ; z) - xC. Obviously, the simulated transcript will be an
+
+accepted one. Based on Lemma 3, the distributions of f1 and z are statistically
+
+close to the real distributions. The simulated distribution of D is the same as
+
+the real one.
+
+                                                39
+D Proof of Theorem 4
+
+Proof. Completeness: Based on Lemma 6, the prover responds with probability
+1/(µ(1)µ(2)). As there are at most k-many 1's in  and HW (x) = w, we have
+at most wk-many non-zero elements in x. Since x = p, we have,
+
+                                                                                (54)
+
+                          x  p wk = T1.
+
+Furthermore, based on Lemma 5, we have
+
+              k-1                                         k-1
+
+  xkr - xj j                          xkr + xjj
+
+              j=1                                         j=1
+
+                                     k-1
+
+ md xkr + xjj
+
+                                     j=1                                        (55)
+
+                                          k-1
+
+ md xk1 · r + xj · j
+
+                                          j=1
+
+                                     k-1                k
+
+ md (wp)kB + B (wp)j = B md (wp)j.
+
+                                     j=1                       j=1
+
+Denote r = xkr - j=1 k-1 xj j , we have
+
+xrb, r = (xrb2 + r2)1/2
+
+                               k               1/2             
+
+B md w2p2 + ( wjpj)2  B(wp)k 2md = T2.
+
+                               j=1
+
+Considering each element of f1. Based on Lemma 7, the sum of discrete
+
+normal variables behaves as its continuous counterpart. Thus, for all j  [0, k), we
+
+have the distribution of  -1   fj,i  is  statistically  close  to  Dd  T   -1.  Therefore,
+                          i=1                                          11
+
+for all j  [0, k) and i  (0, ), we have
+
+                     
+fj,i  2(1T1) d,
+
+fj,0  x -                      -1        fj,i  x +             -1   fj,i
+
+                           i=1                                 i=1              (56)
+
+   w + 2(1T1) d( - 1)  21p kwd,
+                                         
+
+zb,zr  2(2T2) md.
+
+    (k + 1)-special soundness: Given (k + 1) distinct challenges (xs)ks=0, we
+
+                                                                      (s) (s) k
+
+have (k + 1) accepted responses (f1 , zb )s=0 with the same commitments
+A, B, (Ej )j=0 k-1. For each transcript, compute fj,0 (s) = xs - i=1 -1 fi,j (s) for all j 
+
+                                           40
+[0, k), and rebuild f (s) = (f0,0 (s), · · · fk-1,-1 (s) ). Taking (f (0), zb(0)) and (f (1), zb(1)),
+we have
+
+                                x0B + A = Comck(f (0), zb(0)), (57)
+                                x1B + A = Comck(f (1), zb(1)). (58)
+
+Subtracting Equation (58) from Equation (57), we get (x0-x1)B = Comck(f (0)-
+f (1), zb(0) - zb(1)), which gives us an opening of yB with a relaxation factor
+y = (x0 - x1):
+
+yB = Comck(f (0) - f (1), zb(0) - zb(1)) := Comck(b, rb).      (59)
+
+Subtracting x0 times of (59) from y times of (57), we have:
+
+  yA = Comck(yf (0) - x0b; yzb(0) - x0rb)
+=Comck(x0f (1) - x1f (0); x0zb(1) - x1zb(0)) := Comck(a; ra).
+
+Obviously, we have xsb + a = yf (s) for s = {0, 1}. Taking each element in
+b = (bj,i)i=0,j=0 -1,k-1 and a = (aj,i)i=0,j=0 -1,k-1, we have
+
+xsbj,i + aj,i = yfj,i (s), i  [0, ), j  [0, k). (60)
+
+Since i=0 -1 fj,i (s) = xs, we have
+
+-1                                   -1                 -1
+
+yxs = yfj,i (s) = xsbj,i + aj,i,                               (61)
+
+i=0                                  i=0                i=0
+
+and thus 0 = xs( i=0 -1 bj,i - y) + i=0 -1 aj,i. Based on the -binding property of
+the commitment scheme, it holds for s = {0, 1}. Therefore, we have i=0 -1 bj,i -
+y = 0 and i=0 -1 aj,i = 0, and thus i=0 -1 bj,i = y, i.e., i=0 -1 bj,i = y i=0 -1 bj,i
+for i=0 -1 bj,i = 1. As fj,0 = x - i=1 -1 fj,i, we have bj,0 = 1 - i=1 -1 bj,i. Thus,
+
+                                             
+bj,0  1 + 41 kd( - 1)  41 kd.
+
+    Now we construct bi's for all i  [0, N ) with bi = j=0 k-1 bj,ij , where ij's are
+the digits of representation of i in base  such that i = (i0, · · · , ik-1). Clearly,
+
+bi = 0 if and only if bj,ij = 0 for all j  [0, k).
+    Based on Equation (59) and Lemma 5, we have
+
+bi =  k-1                                          k-1  bj,ij
+
+          bj,ij                                k-1
+
+                                     d 2
+
+      j=0                                 j=0                  (62)
+
+d k-2 1 bj,0k  (41 k)kdk- 12 = LS.
+
+    Considering the -binding property of the commitment scheme, the following
+equation holds for (k + 1) challenges
+
+yfj,i (s) = xsbj,i + aj,i = yxsbj,i + aj,i, s  [0, k].         (63)
+
+                                     41
+    We compute pi(xs) = y j=0 k k-1 fj,ij (s) = j=0 k-1(yxsbj,ij + aj,ij ) for each i 
+[0, N ). Obviously, for all s  [0, k], if pi(xs) is a polynomial of degree k, then
+bj,ij = 0 for all j  [0, k), which indicates bi = 0. Thus, for all i  [0, ), we have
+at least one bi is not zero, i.e., b > 0.
+
+    As the last verification step holds, we multiply both sides of the equation by
+yk:
+
+  N -1                        k-1
+
+             pi(xs) · Pi - ykEj xjs
+
+  i=0                         j=0                             (64)
+
+             N -1        k-1
+
+  =xks yk Pi + Ej xsj = Comck(0; ykz(s) r ),
+
+                i=0      j=0
+
+where Ej 's are the terms multiplied by the monomials xjs's of degree at most
+(k - 1) and are independent from xs. Taking all (k + 1) transcripts, we have
+
+             k    E          0                 k (0)       
+
+1 x0 · · · x0                             Comck(0; y zr )
+                         ..                                
+. . . .                  .                ...              
+ .. .. . . ..  ·                      =                    .  (65)
+                      N-1 
+1 xk · · · xkk       yk         biPi    Comck(0; ykzr(k))
+
+                         i=0
+
+Let the Vandermonde matrix on the left hand side of Equation (65) be V . Based
+
+on Equation (6), we can obtain (0, ykr) as the opening of det(V ) · yk i=0 N-1 biPi,
+where r = i=0 N-1 izr(i) (i is defined in Equation (4)). We have
+
+  det(V ) · yk           N-1 biPi = Comck(0; ykr)
+
+                         i=0
+
+  =yk det(V ) ·          N -1
+
+                              biPi - Comck(0; r) = 0
+                           i=0
+                         N -1                                 (66)
+
+  =y det(V ) · i=0 biPi - Comck(0; r) = 0
+
+  = det(V ) · y          N -1
+
+                         i=0 biPi = Comck(0; yr) = 0.
+
+Thus we extract an opening of det(V )·y i=0 N-1 biPi as (0, yr). Let  = k(k+1)/2
+and  = k(k - 1)/2. Based on Lemma 4, we have the bound of yr:
+
+  yr  (k + 1)d(2p)+1w  · 22T2 md                              (67)
+                     
+  (k + 1)2 +2 22Bmd2wp+1 = LS  .
+
+    SHVZK: Assume that the protocol is not aborted. The simulator samples
+
+r  {-B, · · · , B}md, fj,i  D1T1 d for all i  (0, ) and j  [0, k), zb, zr 
+D2T2 md , Ej  U (Rqn) for all j  (0, k), and sets B = Comck(0; r). Then, given x, it
+computes fj,0 = x - i=1 -1 fj,i for all j  [0, k) and sets f = (f0,0, · · · , fk-1,-1),
+A = Comck(f ; zb) - xB, and E0 = i=0 N-1( j=0 k-1 fj,ij )Pi - Comck(0; zr) -
+
+                                42
+HMC Challenger
+
+                                           Registration queries
+
+                                             Signing queries     Queries
+                                           Hash queries for
+                Run       times with
+                                             Signature forgery
+                the same commitment          Signature forgery
+
+Run extractor with all                 's
+
+                to get and an opening
+
+                     for
+
+Fig. 5: Reduction from "forging a ring signature" to "finding an HMC collision"
+for ring signature unforgeability.
+
+   j=1 k-1 Ej xj . Set f1 = (fj,i)j=0,i=1 k-1,-1. Obviously, the simulated transcript will be
+an accepted one.
+
+    Based on Lemma 3, the distributions of f1, zb, zr are statistically close to
+the real distributions. The simulated distributions of A and E0 are the same
+as the real ones. Due to the hiding property of the commitment scheme, the
+distribution of simulated B is computationally indistinguishable from the real
+case. Finally, the simulated E1, · · · , Ek-1 are computationally indistinguishable
+from the real cases.
+
+E Security Reduction of Theorem 3
+
+Theorem 3 reduces "forging a ring signature" to "finding an HMC collision" for
+ring signature unforgeability. The security game can be illustrated in Figure 5.
+The security game can be illustrated in Figure 5.
+
+                                                   43
+    Oracle Simulation. A works as a HMC collision finder with the HMC
+challenger, and a ring signature challenger with the ring signature forger F. A
+simulates the oracles as follows:
+
+    Registration query. Assume F can only query N times (N  1). A randomly
+picks l  {0, 1, · · · , N - 1}. For index l, A sets Pl = Comck(1, 0, · · · , 0; r). For
+other indices j = l, A calls the RKeyGen algorithm to generate a public/private
+key pair (Pj, rj). Upon the (i + 1)-th query, A returns the corresponding public
+key Pi.
+
+    Corruption query. On input a public key Pi, A aborts when i = l. Otherwise,
+A returns the corresponding private key ri.
+
+    Signing query. When F queries to sign on message mj with a signer Pi in a
+public key list Pi = {Pj|j  tj} where tj indicates the indices of the public keys
+in {P0, · · · , PN-1}, i.e., ti  {1, · · · , N - 1}, A processes as follows:
+
+ - If i = l, A calls RSign algorithm directly to get the corresponding signature
+     since he has ri and programs the Hash function (random oracle) if needed.
+
+ - If i = l, A runs the simulator in the proof of Theorem 4 (SHVZK prosperity)
+     to get the signature and programs the Hash function (random oracle) so that
+     H(ck, mi, Pi, A, B, (Ej)j=0 k-1) = x.
+
+    Hash query. For queries with inputs that have already been programmed, A
+returns the corresponding output. Otherwise, A chooses x at random from the
+set C\{x0, · · · , xm-1} where xi's are the previously outputs of the Hash function.
+The output for this input is programmed to x.
+
+    Signature Forgery. At a given point, F finishes running and outputs a
+forgery (mi, i). Since Pl cannot be distinguished from other Pi's due to the
+hiding property of the HMC commiement scheme and F can only make N times
+of registration queries to A, we have the signature is signed by the signer Pl with
+non-negligible probability, i.e., bl = 0.
+
+    Output. After collecting (k + 1) signature forgeries with the same com-
+mitments (this can be done in polynomial time using the forking lemma), A
+computes bi's and an opening (0, yk-1s) to i=0 N-1 bi Pi by running the extractor
+in the proof of Theorem 4. Furthermore, A can find a collision for the HMC
+commitment scheme, M0 = ((bl, 0, · · · , 0), blr) and M1 = (0, yk-1s - i=l biri)
+since (bl, 0, · · · , 0) = 0 (ri's are the private keys of other users in the ring).
+
+                                                   44
+

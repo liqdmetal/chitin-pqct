@@ -1,0 +1,11 @@
+{
+  "status": "research-only",
+  "seed_hex": "6c61756e63682d6578706572696d656e742d7631",
+  "n": 32,
+  "q": 12289,
+  "weight": 8,
+  "coefficient_bound": 4,
+  "positions": [8, 9, 11, 17, 21, 28, 30, 31],
+  "coefficients": [-4, 4, 4, 4, 4, -4, -4, 4],
+  "warning": "Exact C_{w,p} shape only: degree n-1, exactly w nonzero coefficients, and absolute value p. This is not a paper-level Fiat-Shamir security result."
+}

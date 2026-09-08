@@ -1,0 +1,42 @@
+{
+  "status": "research-only",
+  "source": "pqct.parameterization.candidate_set",
+  "candidates": [
+    {
+      "name": "toy-ntt-32",
+      "n": 32,
+      "q": 12289,
+      "m": 8,
+      "d": 32,
+      "w": 16,
+      "precision_bits": 8,
+      "amount_bits": 8,
+      "max_inputs": 2,
+      "max_outputs": 2,
+      "sigma_mask": 3.2,
+      "sigma_opening": 2.4,
+      "challenge_bound": 15,
+      "response_bound": 256,
+      "opening_bound": 256,
+      "security_label": "UNASSESSED_RESEARCH_CANDIDATE"
+    },
+    {
+      "name": "toy-ntt-64",
+      "n": 64,
+      "q": 786433,
+      "m": 16,
+      "d": 64,
+      "w": 32,
+      "precision_bits": 16,
+      "amount_bits": 16,
+      "max_inputs": 4,
+      "max_outputs": 4,
+      "sigma_mask": 4.0,
+      "sigma_opening": 3.0,
+      "challenge_bound": 31,
+      "response_bound": 1024,
+      "opening_bound": 1024,
+      "security_label": "UNASSESSED_RESEARCH_CANDIDATE"
+    }
+  ]
+}

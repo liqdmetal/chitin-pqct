@@ -1,0 +1,9 @@
+[project]
+name = "pq-ct-research"
+version = "0.1.0"
+description = "Research reference model for post-quantum confidential account transactions"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
