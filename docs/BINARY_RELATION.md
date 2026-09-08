@@ -14,7 +14,37 @@ so no unbatching step is required.
 y*b_{i,j} = g_{i,j}(x0) - g_{i,j}(x1),  y = x0 - x1
 ```
 
-## What is NOT implemented (the actual hard part)
+## What is implemented (equations 39, 41-45)
+
+`pqct.protocol1_binary_relation.verify_binary_relation_equations_38_45`
+mechanically checks the paper's downstream algebra given the TRUE
+witness `b_{i,j}`, `t_{i,j}` and the extracted `e^_{i,j}`, `s^_{i,j}`
+(caller-supplied, not derived from commitments):
+
+- eq.(39)/(41): `y*h_{i,j} = x*e^_{i,j} + s^_{i,j}` mod q at 3 transcripts.
+- eq.(42)-(44): the unreduced (over R, not R_q) integer system built from
+  `g_{i,j} = x*b_{i,j} + t_{i,j}`, one row per transcript, with the
+  common quadratic-in-x coefficient `u = b_hat*(Y - b_hat)`,
+  `Y = y*y_zeta`, `b_hat = Y*b_{i,j}`, `t_hat = y_zeta*t_{i,j}`.
+- eq.(45): `D*u = 0` in R, `D` the Vandermonde factor
+  `(x0-x1)(x0-x2)(x1-x2)`, checked directly.
+
+It is a BOUNDED ORACLE, not an extractor: it takes the true bit as
+input and checks the paper's claimed identities hold (or, for a
+non-binary bit, that eq.(41) at the third transcript and everything
+downstream fails, matching the paper's soundness argument). It does
+NOT derive `b_{i,j}` from ciphertexts/commitments -- see
+`equation_38_40_note` in the module for what eq.(38)/(40)'s
+zeta-unbatching step would additionally require.
+
+The scaling `b_hat = y*y_zeta*b` (not `y_zeta*b`) was verified against
+the paper's closing statement (line 2273) with an independent integer
+script before being encoded; using the wrong scaling silently breaks
+eq.(44) even for a genuinely binary witness. See
+`docs/HARD_BLOCKER_PROGRESS.md` for what remains (the full-unbatching
+extractor and the zero-divisor gap between "D*u=0 in R" and "u=0").
+
+## What is still NOT implemented
 
 The paper's equations (38)-(45) go further: they use THREE distinct x
 challenges to build a linear system in the unreduced ring R (not R_q),

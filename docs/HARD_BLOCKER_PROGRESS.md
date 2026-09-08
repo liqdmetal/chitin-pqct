@@ -35,9 +35,12 @@
 - `pqct.protocol1_binary_relation.extract_binary_witness_row`: derives
   relaxed b_{i,j} from two accepting transcripts' g_{i,j}(x) values
   (divided difference, no unbatching needed -- g is never zeta-
-  aggregated). Does NOT yet do the equation (38)-(45) three-transcript
-  integer (mod-R) proof that the witness is exactly binary; see
-  docs/BINARY_RELATION.md for the precise remaining gap.
+  aggregated). `verify_binary_relation_equations_38_45` additionally
+  implements the paper's equations (39),(41)-(45) as a bounded oracle
+  over the TRUE witness (not yet a full extractor -- see
+  docs/BINARY_RELATION.md for the precise remaining gap, notably the
+  eq.(38)/(40) zeta-unbatching step and the zero-divisor gap between
+  "D*u=0 in R" and "u=0").
 - Chi-square goodness-of-fit tool applied to ACCEPTED honest samples
   (not just raw masks) confirmed `g`, `z_g`, AND `z_b,i` all fit their
   claimed D_{1,T1}/D_{2,T2} law (p=0.796/0.494/0.921, n=464). First
