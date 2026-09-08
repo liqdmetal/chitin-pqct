@@ -159,6 +159,9 @@ class FixedChallengeComparison:
     marginal_g_stats: "MarginalIntegerStats | None" = None
     marginal_zg_stats: "MarginalIntegerStats | None" = None
     marginal_zb_stats: "MarginalIntegerStats | None" = None
+    honest_g_samples: tuple[int, ...] = ()
+    honest_zg_samples: tuple[int, ...] = ()
+    honest_zb_samples: tuple[int, ...] = ()
 
     @staticmethod
     def _items(histogram: tuple[tuple[bytes, int], ...]) -> tuple[bytes, ...]:
@@ -420,6 +423,9 @@ def compare_fixed_challenge(
         marginal_g_stats=marginal_integer_stats(honest_g_coeffs, simulator_g_coeffs) if honest_g_coeffs and simulator_g_coeffs else None,
         marginal_zg_stats=marginal_integer_stats(honest_zg_coeffs, simulator_zg_coeffs) if honest_zg_coeffs and simulator_zg_coeffs else None,
         marginal_zb_stats=marginal_integer_stats(honest_zb_coeffs, simulator_zb_coeffs) if honest_zb_coeffs and simulator_zb_coeffs else None,
+        honest_g_samples=tuple(honest_g_coeffs),
+        honest_zg_samples=tuple(honest_zg_coeffs),
+        honest_zb_samples=tuple(honest_zb_coeffs),
     )
 
 

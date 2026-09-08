@@ -62,6 +62,9 @@ from .lattice_estimate import beta_from_delta
 from .lattice_estimate import core_svp_bits
 from .lattice_estimate import delta_from_beta
 from .lattice_estimate import estimate_sis_hardness
+from .protocol1_binary_relation import BinaryRelationError
+from .protocol1_binary_relation import BinaryWitnessCheck
+from .protocol1_binary_relation import extract_binary_witness_row
 from .hmc_transcript import (
     HMCProof,
     HMCTranscriptError,

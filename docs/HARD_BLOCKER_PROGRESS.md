@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 148 tests pass.
+- 151 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -32,7 +32,20 @@
   `FiniteDiscreteGaussian` PMF (p=0.864, n=20000; see
   docs/GOODNESS_OF_FIT.md). This is self-consistency, not agreement
   with Gao's exact infinite D_sigma law.
-
+- `pqct.protocol1_binary_relation.extract_binary_witness_row`: derives
+  relaxed b_{i,j} from two accepting transcripts' g_{i,j}(x) values
+  (divided difference, no unbatching needed -- g is never zeta-
+  aggregated). Does NOT yet do the equation (38)-(45) three-transcript
+  integer (mod-R) proof that the witness is exactly binary; see
+  docs/BINARY_RELATION.md for the precise remaining gap.
+- Chi-square goodness-of-fit tool applied to ACCEPTED honest samples
+  (not just raw masks) confirmed `g`, `z_g`, AND `z_b,i` all fit their
+  claimed D_{1,T1}/D_{2,T2} law (p=0.796/0.494/0.921, n=464). First
+  two attempts falsely REJECTED z_g/z_b,i (p~1e-118) due to a
+  gaussian_tail=9 vs true sigma~19.6 truncation bug in the TEST
+  SCRIPT's own fixture, not in pqct itself -- root-caused (verified
+  the truncated support was 90% flat at its own boundary) and fixed
+  by widening tail to 60; see docs/GOODNESS_OF_FIT.md.
 
 ## Still open
 
@@ -53,6 +66,11 @@
 - Independent Rust implementation.
 - Balance/range/conservation composition.
 - External cryptanalysis.
+- `Protocol1DistributionParameters` shares one `gaussian_tail` for both
+  `t_profile` (small sigma) and `opening_profile` (larger sigma); tests
+  must hand-tune a shared value, risking exactly the truncation bug
+  found and fixed this session. Per-profile tails would remove that
+  footgun.
 
 ## Boundary
 

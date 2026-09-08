@@ -38,6 +38,37 @@ verdict: FAILS to reject fit (p>=0.01)
 This is a genuine machine-checked fact: the finite-support sampler's own
 inverse-CDF output matches its own claimed PMF within statistical noise.
 
+## Real result: ACCEPTED honest g/z_g/z_b,i samples fit the paper's law
+
+`tools/check_accepted_goodness_of_fit.py` tests Gao's actual Theorem 1
+completeness claim (paper text lines 2030-2031): after Rej() acceptance,
+`g_{i,j}` should be statistically close to `D_{1,T1}^d` and
+`(z_g,(z_b,i))` close to `D_{2,T2}^{md}`.
+
+```text
+g:    p=0.796 (n=464, df=12)   FAILS to reject fit
+z_g:  p=0.494 (n=464, df=60)   FAILS to reject fit
+z_b,i: p=0.921 (n=464, df=60)  FAILS to reject fit
+```
+
+All three claimed laws survive this falsification attempt.
+
+### A bug I found and fixed in the TEST TOOL, not in pqct
+
+The first two runs (gaussian_tail=9, then a mis-scaled 60/40 with wrong
+per-parameter tails) gave `z_g`/`z_b,i` p-values of ~1e-118 and ~1e-139 --
+apparent hard rejection. Root cause: `gaussian_tail=9` against z_g's true
+`sigma=phi2*T2~19.6` truncated the support to well under half a standard
+deviation, so the finite sampler was drawing from a near-flat/boxy
+window, not anything resembling a Gaussian shape at all (verified
+directly: weight at the tail boundary was 90% of the peak weight,
+confirming near-uniformity). This was a parameter-choice bug in the
+TEST SCRIPT'S fixture, not a bug in `pqct.protocol1_sampling` or
+evidence against the paper's claim. Fixed by widening `gaussian_tail`
+to 60 (t_profile and opening_profile currently share one tail parameter
+in `Protocol1DistributionParameters` -- a real, separate limitation
+worth fixing upstream so tests don't have to hand-tune a shared value).
+
 ## Boundary
 
 This tests SELF-CONSISTENCY (does the sampler match its own math), not
