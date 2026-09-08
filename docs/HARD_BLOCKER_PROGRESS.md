@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 139 tests pass.
+- 148 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -26,6 +26,13 @@
   bits (self-built, cited-constants methodology; not the verified
   Albrecht/Player/Scott tool). Found and fixed a real dimensional bug:
   the toy `ParameterCandidate.n` conflates ring degree with SIS rank.
+- `pqct.goodness_of_fit` adds a pure-stdlib chi-square goodness-of-fit
+  test (regularized incomplete gamma, validated to 3e-15 vs scipy as a
+  test-only oracle). `t_i` mask samples fit their own claimed
+  `FiniteDiscreteGaussian` PMF (p=0.864, n=20000; see
+  docs/GOODNESS_OF_FIT.md). This is self-consistency, not agreement
+  with Gao's exact infinite D_sigma law.
+
 
 ## Still open
 

@@ -31,6 +31,11 @@ from .binary_hmc import (
     verify_binary,
 )
 from .gaussian import GaussianError, GaussianProfile, empirical_histogram, sample_truncated, shake_source
+from .goodness_of_fit import ChiSquareResult
+from .goodness_of_fit import GoodnessOfFitError
+from .goodness_of_fit import chi_square_goodness_of_fit
+from .goodness_of_fit import chi_square_p_value
+from .goodness_of_fit import regularized_gamma_q
 from .hmc import (
     HMCError,
     HMCKey,
