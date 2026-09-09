@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 229 tests pass.
+- 238 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -91,6 +91,11 @@
   lands ~89 classical bits under OUR self-built estimator (not the
   verified tool), which is exactly why blocker item 5 still matters.
   See docs/PAPER_BOUNDS.md.
+- Lemma 6 completeness validated QUANTITATIVELY: measured Protocol 1
+  acceptance matches the paper's 1/(mu(phi1)mu(phi2)) within Wilson 95%
+  CI at phi1=1,2,4 (tools/check_completeness_error.py). First numeric
+  cross-check of a theorem claim against harness behavior. See
+  docs/COMPLETENESS_ERROR.md.
 
 ## Still open
 
