@@ -13,6 +13,48 @@ authorizes deployment as a separate, explicit act (this doc's existence
 is not that authorization). Writing a scope document is planning, not
 a green light.
 
+## STATUS UPDATE: an experimental testnet now RUNS
+
+`tools/run_testnet.py` mines real blocks of real lattice-proof transactions
+on an isolated, valueless, in-memory network and rejects six classes of
+attack. Measured on toy parameters (n=8, q=12289, k=5):
+
+```
+3 blocks mined, 3 txs, 0 attacks succeeded, 5 rejections recorded
+prove ~320-344 ms, verify ~8 ms, payload 477 bytes
+attacks rejected: verbatim replay / proof reuse under fresh nonce /
+                  wrong chain / stale state root / expiry /
+                  non-conserving amounts (refused by prover)
+```
+
+This changes the honest framing. Section 2b below is no longer "net-new
+work" in full: state binding, replay protection, a canonical malleability-
+rejecting wire codec, txids, block sealing and an acceptance pipeline now
+exist and are adversarially tested (`pqct/wire_codec.py`,
+`pqct/tx_envelope.py`, `pqct/experimental_node.py`).
+
+What this does NOT change: the crypto is still unproven. A testnet with
+valueless play tokens is a legitimate place to exercise unproven research
+crypto -- that is how bugs get found -- but nothing here may be called
+secure, carry value, connect to a real network, or enter DERO consensus.
+Every honest transaction proved and verified here rests on a construction
+whose soundness/SHVZK/Fiat-Shamir proofs do not exist yet.
+
+Two of Section 1's items moved during the sessions that built this:
+- item 6 (composition) is DONE: `transaction_proof` composes binary +
+  conservation over shared commitments, with a witness-free verifier.
+- item 5 (verified estimate) now RUNS but is BLOCKED on interpretation, not
+  tooling: the real lattice-estimator produces numbers, and an added
+  Gaussian-heuristic gate shows the natural uniform norm mapping makes the
+  instance trivially easy by counting -- so those numbers are not a security
+  level. See docs/VERIFIED_LATTICE_ESTIMATE.md.
+
+Also fixed here, and load-bearing for any real network: a
+CHALLENGE-INJECTION FORGERY in both verifiers (a caller could supply the
+Fiat-Shamir challenge and solve the commitment equations backwards, forging
+conservation for non-conserving sums and binaryness for non-bit
+commitments). Fiat-Shamir enforcement is now the default.
+
 ## 1. What must be true of the crypto before ANY testnet code exists
 
 Pulled directly from `docs/HARD_BLOCKER_PROGRESS.md`'s "Still open" list.

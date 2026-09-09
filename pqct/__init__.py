@@ -72,6 +72,13 @@ from .transaction_proof import TransactionProofError
 from .transaction_proof import TransactionVerification
 from .transaction_proof import prove_transaction
 from .transaction_proof import verify_transaction
+from .wire_codec import CodecError, MAGIC
+from .wire_codec import decode_element, decode_matrix, decode_params, decode_vector
+from .wire_codec import encode_element, encode_matrix, encode_params, encode_vector
+from .tx_envelope import EnvelopeError, ReplayGuard, TransactionEnvelope
+from .tx_envelope import compute_txid, envelope_statement
+from .experimental_node import AcceptedTx, Block, ExperimentalNode, NodeError
+from .experimental_node import genesis_state_root, next_state_root
 from .binary_protocol1 import Protocol1Error, Protocol1Parameters, Protocol1Proof, derive_protocol1_challenge, prove_protocol1, verify_protocol1
 from .binary_protocol1_ring import (RingProtocol1Error, RingProtocol1Parameters, RingProtocol1Proof, build_protocol1_ring_transcript, prove_protocol1_ring, verify_protocol1_ring)
 from .binary_hmc import (
