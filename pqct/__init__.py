@@ -53,7 +53,9 @@ from .protocol5 import verify_linear_equation
 from .paper_bounds import PaperBoundsError
 from .paper_bounds import completeness_error_protocol1
 from .paper_bounds import completeness_error_protocol5
+from .paper_bounds import eq2_rhs
 from .paper_bounds import gamma_bin
+from .paper_bounds import gamma_bin_reduced
 from .paper_bounds import gamma_le
 from .paper_bounds import kappa_for_s
 from .paper_bounds import mu_phi

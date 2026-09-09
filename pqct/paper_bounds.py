@@ -25,6 +25,7 @@ Module-SIS/Module-LWE hardness estimate.
 from __future__ import annotations
 
 from decimal import Decimal
+from math import log2, sqrt
 
 
 class PaperBoundsError(ValueError):
@@ -109,6 +110,63 @@ def completeness_error_protocol1(phi1: Decimal, phi2: Decimal) -> Decimal:
     return Decimal(1) - Decimal(1) / (mu_phi(Decimal(phi1)) * mu_phi(Decimal(phi2)))
 
 
+def gamma_bin_reduced(
+    p: int, d: int, w: int, k: int, S: int,
+    phi1: Decimal, phi2: Decimal, B: int, m: int,
+) -> Decimal:
+    """Section 8 REDUCED binding bound: gamma_bin = max{B_Bin, B_Amor}.
+
+    Gao's evaluation uses this instead of the unreduced Theorem 1 gamma_bin.
+    The reduction (from [EZS+19]) additionally checks that
+    ||(g_i*(x*1-g_i))_i|| is a factor 4d smaller than the theoretical bound,
+    sacrificing completeness (error < 1%) for a much smaller binding bound.
+
+        B_Bin  = 4p^2 * sqrt(d^3 w^3 (p^2 k^3 S^3 phi1^4
+                                      + phi2^2 B^2 m^2 (S+1)))        (21)
+        B_Amor = 2^(kappa+1) S B p^kappa w^(kappa-1) m d^2 phi2
+                 * sqrt(m d (S+1)) * sum_{i=0}^{S-1} (wp)^i
+
+    with kappa = S(S-1)/2. Transcribed from the 900-dpi PDF crop and
+    VALIDATED by reproducing the paper's own printed number
+    2*gamma_bin ~ 2.86e14 at S=2 (see tools/reproduce_paper_binding.py).
+    """
+    if min(p, d, w, k, S, B, m) <= 0:
+        raise PaperBoundsError("p,d,w,k,S,B,m must be positive")
+    phi1 = Decimal(phi1)
+    phi2 = Decimal(phi2)
+    if phi1 <= 0 or phi2 <= 0:
+        raise PaperBoundsError("phi1 and phi2 must be positive")
+    kap = kappa_for_s(S)
+    b_bin = Decimal(4) * Decimal(p * p) * (
+        Decimal(d ** 3) * Decimal(w ** 3) * (
+            Decimal(p * p) * Decimal(k ** 3) * Decimal(S ** 3) * phi1 ** 4
+            + phi2 ** 2 * Decimal(B * B) * Decimal(m * m) * Decimal(S + 1)
+        )
+    ).sqrt()
+    wp_sum = sum((Decimal(w) * Decimal(p)) ** i for i in range(S))
+    b_amor = (
+        Decimal(2) ** (kap + 1)
+        * Decimal(S) * Decimal(B) * Decimal(p) ** kap * Decimal(w) ** (kap - 1)
+        * Decimal(m) * Decimal(d * d) * phi2
+        * (Decimal(m * d) * Decimal(S + 1)).sqrt()
+        * wp_sum
+    )
+    return max(b_bin, b_amor)
+
+
+def eq2_rhs(n_module: int, d: int, q: int, delta: Decimal) -> Decimal:
+    """Right-hand side of Gao Eq.(2): min{q, 2^(2*sqrt(n*d*log2(q)*log2(delta)))}.
+
+    n is the MODULE rank and d the ring degree; n*d appears exactly once.
+    Validated by reproducing the paper's printed 4.10e14 at its evaluation
+    profile with delta = 1.0045.
+    """
+    if min(n_module, d, q) <= 0 or delta <= 1:
+        raise PaperBoundsError("n,d,q must be positive and delta > 1")
+    exponent = 2.0 * sqrt(n_module * d * log2(q) * log2(float(delta)))
+    return min(Decimal(q), Decimal(2) ** Decimal(str(exponent)))
+
+
 # --- Theorem 2 (Protocol 5) ---
 
 def gamma_le(
@@ -136,7 +194,9 @@ __all__ = [
     "PaperBoundsError",
     "completeness_error_protocol1",
     "completeness_error_protocol5",
+    "eq2_rhs",
     "gamma_bin",
+    "gamma_bin_reduced",
     "gamma_le",
     "kappa_for_s",
     "mu_phi",
