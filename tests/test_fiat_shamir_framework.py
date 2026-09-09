@@ -132,8 +132,8 @@ class HonestyTests(unittest.TestCase):
         framework = paper_framework()
         open_names = {o.name for o in framework.open_obligations}
         self.assertNotIn("classical-rewinding-to-3-transcripts", open_names)
+        self.assertNotIn("commitment-binding-under-relaxation", open_names)
         self.assertIn("quantum-rewinding-obstruction", open_names)
-        self.assertIn("commitment-binding-under-relaxation", open_names)
         self.assertIn("transcript-simulation-shvzk", open_names)
 
     def test_quantum_rewinding_is_explicitly_not_attempted(self):
