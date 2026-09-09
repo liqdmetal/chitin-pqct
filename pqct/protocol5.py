@@ -131,9 +131,17 @@ def ring_cycle_mask_weighted_sum_is_zero(
 
 @dataclass(frozen=True)
 class Protocol5Parameters:
-    """Protocol 5 knobs: T3/T2' derived from paper formulas; verifier
-    norm bounds are EXPLICIT RESEARCH bounds (paper's 6*phi3*T3*sqrt(d)
-    style, not independently re-derived -- flagged, not certified)."""
+    """Protocol 5 knobs with the paper's EXACT verifier norm bounds.
+
+    f_bound = 6*phi_3*T_3*sqrt(d)  and  z_bound = 2*phi_2*T_2*sqrt(m*d)
+    were transcribed from Protocol 2 step 17 at 500 dpi
+    (vendor/gao-step17-crop.png) and match the values this class computes.
+    They are the paper's STATED verifier checks -- not independently
+    re-derived here, and matching them is not a security certification
+    (that needs the verified lattice estimate). T3 uses compute_t3 with
+    the concrete lambda signs; T2 is the Appendix C eq.(48) value,
+    B*w*p*sqrt(m*d*(||omega||_1^2 + S + 1)).
+    """
 
     p: int
     w: int

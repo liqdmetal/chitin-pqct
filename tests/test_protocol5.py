@@ -37,6 +37,38 @@ class RingCycleMaskTests(unittest.TestCase):
         self.assertEqual(compute_t3((1, 1, -1), 2, 4, 5), Decimal(2 * 2) * Decimal(20).sqrt())
 
 
+class Protocol5PaperBoundTests(unittest.TestCase):
+    """Pin verifier bounds + gamma_LE to Gao's published formulas."""
+
+    def test_verifier_bounds_match_paper_step17_formulas(self):
+        """Gao Protocol 2 step 17 (500-dpi transcription):
+            ||f_j|| <= 6*phi_3*T_3*sqrt(d)   for all j in [0,k)
+            ||z||   <= 2*phi_2*T_2*sqrt(m*d)
+        with T_3 = max(sign sums)*p*sqrt(w*k),
+        T_2 = B*w*p*sqrt(m*d*(||omega||_1^2+S+1)) (Appendix C eq.48).
+        """
+        p, w, k, B, m, d = 2, 4, 5, 1, 1, 8
+        phi2, phi3 = Decimal("4"), Decimal("4")
+        omega_l1, S, sign_max = 3, 3, 2
+        p5 = Protocol5Parameters.from_research_bounds(
+            p=p, w=w, k=k, B=B, m=m, d=d, phi2=phi2, phi3=phi3,
+            sign_max=sign_max, omega_l1=omega_l1, account_count=S,
+        )
+        t3 = Decimal(sign_max * p) * Decimal(w * k).sqrt()
+        t2 = Decimal(B * w * p) * Decimal(m * d * (omega_l1 * omega_l1 + S + 1)).sqrt()
+        self.assertEqual(p5.f_bound, Decimal(6) * phi3 * t3 * Decimal(d).sqrt())
+        self.assertEqual(p5.z_bound, Decimal(2) * phi2 * t2 * Decimal(m * d).sqrt())
+
+    def test_gamma_le_matches_paper_bounds_formula(self):
+        from pqct.paper_bounds import gamma_le
+        p5 = Protocol5Parameters.from_research_bounds(
+            p=2, w=4, k=5, B=1, m=1, d=8,
+            phi2=Decimal("4"), phi3=Decimal("4"), sign_max=2,
+            omega_l1=3, account_count=3,
+        )
+        self.assertEqual(p5.gamma_le_required, gamma_le(Decimal("4"), 1, 8, 1, 4, 2, 3, 3))
+
+
 class Protocol5EndToEndTests(unittest.TestCase):
     def setUp(self):
         self.params = ToyParameters(n=8, q=12289, k=1)
