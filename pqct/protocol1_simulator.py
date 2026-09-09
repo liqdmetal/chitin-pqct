@@ -61,6 +61,37 @@ def _commitment_subtract(
     return tuple(a.sub(scalar.mul(b)) for a, b in zip(left, right))
 
 
+def simulate_protocol1_ring_with_abort(
+    *args,
+    rejection_source,
+    rejection_policy,
+    **kwargs,
+):
+    """Simulator WITH the Lemma 6 abort stage. Returns (result, decision).
+
+    `simulate_protocol1_ring` always succeeds, which makes it an unfair
+    stand-in for the honest prover: the honest prover aborts at rate
+    1 - 1/mu(phi), so its transcript distribution is conditioned on
+    acceptance. A never-aborting simulator differs from it in acceptance
+    RATE even when every accepted transcript is individually correct, and
+    that rate is itself a distinguisher.
+
+    Per Gao Lemma 6 the abort decision is WITNESS-INDEPENDENT (probability
+    1/mu(phi), a function of phi alone), so the simulator can make it
+    without knowing any secret -- which is precisely why simulating is
+    possible at all.
+
+    Returns (None, decision) when the simulator aborts, mirroring the
+    honest prover's abort-and-retry loop.
+    """
+    from .simulator_rejection import simulate_rejection
+
+    decision = simulate_rejection(rejection_source, rejection_policy)
+    if not decision.accepted:
+        return None, decision
+    return simulate_protocol1_ring(*args, **kwargs), decision
+
+
 def simulate_protocol1_ring(
     statement: bytes,
     base_key: HMCKey,

@@ -183,6 +183,12 @@ from .protocol1_family import (
 from .protocol1_rejection_audit import RejectionAuditError, RejectionTupleAudit, build_rejection_tuple_audit
 from .protocol1_sampled import SampledProtocol1Error, SampledProtocol1Result, prove_protocol1_ring_sampled
 from .protocol1_simulator import SimulationError, SimulatedProtocol1, simulate_protocol1_ring
+from .protocol1_simulator import simulate_protocol1_ring_with_abort
+from .simulator_rejection import RejectionRateComparison, SimulatorRejection
+from .simulator_rejection import SimulatorRejectionError, measure_simulator_rate
+from .simulator_rejection import simulate_rejection, simulator_acceptance_probability
+from .msis_hardness import HardnessError, MSISHardnessReport, analyze_msis
+from .msis_hardness import blocksize_for_root_hermite, root_hermite_from_blocksize
 from .protocol1_shvzk_compare import (
     FixedChallengeComparison,
     SHVZKComparisonError,
