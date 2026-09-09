@@ -30,6 +30,13 @@ from .balance_transcript import AmountCommitment
 from .balance_transcript import BalanceTranscript
 from .balance_transcript import BalanceTranscriptError
 from .balance_transcript import build_balance_transcript
+from .linear_equation_transcript import CycleMaskCommitment
+from .linear_equation_transcript import LinearEquationError
+from .linear_equation_transcript import build_cycle_mask_commitment
+from .linear_equation_transcript import check_commitment_equation
+from .linear_equation_transcript import compute_response_tail
+from .linear_equation_transcript import f0_in_canonical_range
+from .linear_equation_transcript import reconstruct_f0_over_integers
 from .binary_protocol1 import Protocol1Error, Protocol1Parameters, Protocol1Proof, derive_protocol1_challenge, prove_protocol1, verify_protocol1
 from .binary_protocol1_ring import (RingProtocol1Error, RingProtocol1Parameters, RingProtocol1Proof, build_protocol1_ring_transcript, prove_protocol1_ring, verify_protocol1_ring)
 from .binary_hmc import (

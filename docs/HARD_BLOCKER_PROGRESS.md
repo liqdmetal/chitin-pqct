@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 174 tests pass.
+- 182 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -59,6 +59,13 @@
   Conservation itself is still checked as an exact integer relation
   against the witnesses, NOT yet a ZK Protocol 5 inner-product proof.
   See docs/BALANCE_TRANSCRIPT.md.
+- `pqct.linear_equation_transcript` implements Gao Protocol 5's
+  ring-level cycle-masking machinery: D=Com(d;r_d) with <d,2^k>=0 over
+  Z, response tail f_j=x*c_j+d_j (f_0 omitted), integer-level f_0
+  reconstruction, and the "f_0 in R_q" overflow gate. Test-verified
+  discrimination: a cheat with sum 2^j c_j == q (0 mod q, nonzero over
+  Z) is CAUGHT by the range gate; honest transcripts pass. See
+  docs/LINEAR_EQUATION_TRANSCRIPT.md.
 
 ## Still open
 
@@ -81,7 +88,10 @@
   (`balance_composition`); commitment-level composition done
   (`balance_transcript`, real Protocol 1 proofs + eq.(11) check).
   Remaining: the ZK conservation proof itself (Gao Protocol 5
-  inner-product argument with cycle masking over ring elements).
+  inner-product argument with cycle masking over ring elements) --
+  ring-level machinery now exists in `linear_equation_transcript`;
+  what's left is the third rejection stage (phi_3/T_3) and end-to-end
+  composition with the Protocol 1 binary proofs.
 - External cryptanalysis.
 - `Protocol1DistributionParameters` shares one `gaussian_tail` for both
   `t_profile` (small sigma) and `opening_profile` (larger sigma); tests
