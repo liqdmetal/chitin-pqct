@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 
+from .authorization import AuthorizationError, NoteRegistry
 from .transaction_proof import verify_transaction
 from .tx_envelope import ReplayGuard, TransactionEnvelope, compute_txid
 
@@ -90,6 +91,7 @@ class ExperimentalNode:
     mempool: list = field(default_factory=list)
     blocks: list = field(default_factory=list)
     guard: ReplayGuard = None
+    registry: NoteRegistry = None
     rejections: list = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -99,12 +101,27 @@ class ExperimentalNode:
             self.state_root = genesis_state_root(self.chain_id)
         if self.guard is None:
             self.guard = ReplayGuard(chain_id=self.chain_id)
+        if self.registry is None:
+            self.registry = NoteRegistry()
 
     def submit(
         self, *, envelope, payload, key, bit_commitments, binary_proofs,
         conservation, signs, bit_width, p1_params, p5,
+        spent_note_ids=None, created_notes=None, signatures=None,
     ) -> tuple[bool, str]:
-        """Run the full acceptance pipeline. Returns (accepted, reason)."""
+        """Run the full acceptance pipeline. Returns (accepted, reason).
+
+        Gates, in order: chain/expiry/replay -> state freshness -> proof
+        verification -> AUTHORIZATION (provenance, ownership, double-spend).
+
+        Authorization is last because it is the most expensive, but it is
+        NOT optional: without it a transaction with fabricated inputs
+        passes every other gate, since conserving 1,000,000 in and
+        1,000,000 out is arithmetically valid. Passing `spent_note_ids=None`
+        runs the node in NO-VALUE mode (proof plumbing only) and is
+        reported as such, so it can never be mistaken for an authorized
+        transfer.
+        """
         # Gate 1-3: envelope, chain, expiry, replay.
         ok, reason = self.guard.check_and_record(envelope, self.height)
         if not ok:
@@ -141,12 +158,37 @@ class ExperimentalNode:
             return False, reason
 
         txid = compute_txid(payload)
+
+        # Gate 5: AUTHORIZATION -- provenance, ownership, no double-spend.
+        value_mode = spent_note_ids is not None
+        if value_mode:
+            authorized, auth_reason = self.registry.authorize_spend(
+                statement=statement,
+                spent_note_ids=spent_note_ids,
+                created_notes=created_notes or (),
+                signatures=signatures or (),
+            )
+            if not authorized:
+                reason = f"unauthorized: {auth_reason}"
+                self.rejections.append(reason)
+                return False, reason
+            try:
+                self.registry.apply_spend(
+                    spent_note_ids=spent_note_ids,
+                    created_notes=created_notes or (),
+                )
+            except AuthorizationError as error:
+                reason = f"spend application failed: {error}"
+                self.rejections.append(reason)
+                return False, reason
+
         self.mempool.append(AcceptedTx(
             txid=txid, envelope=envelope, account_count=len(tuple(signs)),
             bit_width=bit_width,
             conservation_gates=verification.conservation_gates,
         ))
-        return True, f"accepted txid={txid.hex()[:16]}"
+        mode = "authorized" if value_mode else "NO-VALUE (proof only)"
+        return True, f"accepted txid={txid.hex()[:16]} [{mode}]"
 
     def seal_block(self) -> Block:
         """Advance the chain by one block over the current mempool."""
@@ -173,6 +215,8 @@ class ExperimentalNode:
             "mempool": len(self.mempool),
             "total_txs": sum(len(b.txids) for b in self.blocks),
             "rejections": len(self.rejections),
+            "unspent_notes": len(self.registry.unspent),
+            "spent_notes": len(self.registry.spent),
             "status": "EXPERIMENTAL -- valueless, unproven crypto, not consensus",
         }
 

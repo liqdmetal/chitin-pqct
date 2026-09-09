@@ -203,6 +203,81 @@ def main() -> int:
         print(f"    -> rejected by prover: {type(error).__name__}: "
               f"{str(error)[:70]}")
 
+    banner("PHASE 3: VALUE -- ownership, provenance, double-spend")
+    from pqct.authorization import (
+        Note, authorization_message, generate_keypair, sign_authorization,
+    )
+
+    alice = generate_keypair()
+    bob = generate_keypair()
+    print(f"  alice address : {alice.address.hex()}")
+    print(f"  bob address   : {bob.address.hex()}")
+    print(f"  signature alg : ML-DSA-65 (pk {len(alice.public)}B, "
+          f"sig 3309B)")
+
+    alice_note = Note(commitment=b"alice-genesis-16", owner=alice.public,
+                      created_by=b"genesis", index=0)
+    alice_id = node.registry.mint_genesis(alice_note)
+    print(f"  funded alice  : note {alice_id.hex()[:16]}... from genesis")
+
+    def value_tx(label, nonce, *, spent, outputs, signer, sign_stmt=None):
+        envelope = TransactionEnvelope(
+            CHAIN_ID, node.state_root, nonce, 10_000)
+        statement = envelope.statement(
+            bit_width=BIT_WIDTH, account_count=len(scenarios[0][1]))
+        signs = tuple(a.sign for a in scenarios[0][1])
+        p5 = protocol5_params_for_lambdas(
+            signs, p=2, w=4, k=BIT_WIDTH, B=1, m=wallet.m, d=8,
+            phi2=Decimal("4"), phi3=Decimal("4"))
+        proof = prove_transaction(
+            seed=f"v{nonce}".encode(), statement=statement, key=wallet.key,
+            amounts=scenarios[0][1], bit_width=BIT_WIDTH,
+            distribution=wallet.distribution, p1_params=wallet.p1, p5=p5,
+            phi2=Decimal("4"), phi3=Decimal("4"))
+        message = authorization_message(
+            statement=sign_stmt if sign_stmt is not None else statement,
+            spent_note_ids=spent,
+            created_note_ids=[n.note_id for n in outputs])
+        sigs = [sign_authorization(signer.secret, message) for _ in spent]
+        ok, reason = node.submit(
+            envelope=envelope, payload=b"vpayload", key=wallet.key,
+            bit_commitments=proof.bit_commitments,
+            binary_proofs=proof.binary_proofs,
+            conservation=proof.conservation,
+            signs=signs, bit_width=BIT_WIDTH,
+            p1_params=wallet.p1, p5=p5,
+            spent_note_ids=spent, created_notes=outputs, signatures=sigs)
+        print(f"\n  [{label}]\n    -> {'ACCEPTED' if ok else 'rejected'}: {reason}")
+        return ok
+
+    to_bob = [Note(commitment=b"bob-16", owner=bob.public,
+                   created_by=b"tx-v1", index=0)]
+
+    # Attack FIRST, while alice's note is still unspent, so the THEFT case
+    # exercises the OWNERSHIP gate rather than the double-spend gate. (An
+    # earlier ordering ran theft after the honest spend and reported
+    # "already spent" -- it was testing the wrong gate.)
+    if value_tx("THEFT (bob signs for alice's unspent note)", 100,
+                spent=[alice_id], outputs=to_bob, signer=bob):
+        bad += 1
+    if value_tx("MINT FROM NOTHING (fabricated input)", 101,
+                spent=[b"\xAA" * 32], outputs=to_bob, signer=alice):
+        bad += 1
+
+    # Now the honest transfer.
+    if not value_tx("alice -> bob, alice signs (honest)", 102,
+                    spent=[alice_id], outputs=to_bob, signer=alice):
+        print("    !!! honest transfer failed (BAD) !!!")
+        bad += 1
+    node.seal_block()
+
+    # And only now can double-spend be demonstrated.
+    stolen = [Note(commitment=b"bob-steal", owner=bob.public,
+                   created_by=b"tx-v2", index=0)]
+    if value_tx("DOUBLE SPEND (re-spend consumed note)", 103,
+                spent=[alice_id], outputs=stolen, signer=alice):
+        bad += 1
+
     banner("RESULT")
     summary = node.summary()
     for key, value in summary.items():
