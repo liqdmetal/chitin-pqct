@@ -178,8 +178,10 @@ def step_security_frameworks(step: Step) -> None:
     ok_budget = (not budget.claimable) and "NO CLAIM" in budget.verdict
     # The M-SIS range must still match the hardness module.
     ok_msis = 85.0 <= budget.minimum_low <= 120.0
+    # M-LWE must now be ANALYSED (it was the last uncertified component).
+    ok_mlwe = not budget.uncertified_components
 
-    step.ok = ok_fs and ok_budget and ok_msis
+    step.ok = ok_fs and ok_budget and ok_msis and ok_mlwe
     step.detail = (
         f"FS: {fs_open}/{len(framework.open_obligations) + len(framework.discharged_obligations)}"
         f" open, soundness {framework.soundness_bits:.0f}b - forking "
@@ -187,6 +189,7 @@ def step_security_frameworks(step: Step) -> None:
         f"= {framework.residual_bits_optimistic:.0f}b; "
         f"budget capped by {budget.binding_component.name} "
         f"({budget.minimum_low:.0f}-{budget.minimum_high:.0f}b), "
+        f"uncertified={len(budget.uncertified_components)}, "
         f"claimable={budget.claimable}"
     )
 

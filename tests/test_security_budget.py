@@ -29,15 +29,24 @@ class ComponentTests(unittest.TestCase):
         with self.assertRaises(BudgetError):
             Component("bad", 100.0, 50.0, Certification.COMPUTED_EXACT, "x")
 
-    def test_unanalysed_is_not_certified(self):
-        self.assertFalse(mlwe_component().certified)
+    def test_every_component_is_now_certified(self):
+        """M-LWE was the last UNANALYSED component; pqct/mlwe_hardness.py
+        closed it, so nothing should be uncertified now."""
+        self.assertTrue(mlwe_component().certified)
         self.assertTrue(msis_component().certified)
         self.assertTrue(signature_component().certified)
+        self.assertEqual(paper_budget().uncertified_components, ())
 
-    def test_mlwe_gap_is_explicit_about_confidentiality(self):
+    def test_mlwe_basis_documents_the_sample_limit_and_caveats(self):
         basis = mlwe_component().basis
-        self.assertIn("NOT ANALYSED", basis)
-        self.assertIn("hiding", basis.lower())
+        self.assertIn("SAMPLE-LIMITED", basis)
+        self.assertIn("NOT certified", basis)
+        self.assertIn("hybrid", basis)
+
+    def test_mlwe_and_msis_are_comparable(self):
+        """The paper's m~2n balancing: neither should dominate."""
+        mlwe, msis = mlwe_component(), msis_component()
+        self.assertLess(abs(mlwe.bits_low - msis.bits_low), 10.0)
 
     def test_msis_range_matches_the_hardness_module(self):
         component = msis_component()
@@ -87,20 +96,28 @@ class HonestyTests(unittest.TestCase):
     def test_verdict_names_every_blocker(self):
         verdict = paper_budget().verdict
         self.assertIn("NO CLAIM", verdict)
-        self.assertIn("M-LWE hiding", verdict)
+        # M-LWE is no longer a blocker; the losses and residual still are.
+        self.assertNotIn("uncertified component", verdict)
         self.assertIn("forking", verdict)
         self.assertIn("non-positive", verdict)
 
-    def test_still_not_claimable_even_if_residual_were_positive(self):
-        """Certification is a separate gate from arithmetic: a comfortable
-        residual must NOT unlock a claim while a component is unanalysed."""
+    def test_certification_is_a_gate_independent_of_arithmetic(self):
+        """A comfortable residual must NOT unlock a claim while ANY
+        component is unanalysed. Uses an explicit unanalysed component now
+        that M-LWE is closed, so the property is tested on its own terms."""
+        components = (
+            msis_component(),
+            Component("hypothetical unknown", 0.0, 0.0,
+                      Certification.UNANALYSED, "nobody has looked"),
+            signature_component(),
+        )
         budget = SecurityBudget(
-            components=default_components(),
+            components=components,
             losses=(Loss("none", 0.0, "no loss", True),),
         )
         self.assertGreater(budget.residual_low, 0.0)
-        self.assertFalse(budget.claimable, "unanalysed M-LWE must still block")
-        self.assertIn("M-LWE", budget.verdict)
+        self.assertFalse(budget.claimable, "unanalysed component must block")
+        self.assertIn("hypothetical unknown", budget.verdict)
 
     def test_becomes_claimable_only_when_everything_is_closed(self):
         """Documents the exact conditions: all certified, all losses
