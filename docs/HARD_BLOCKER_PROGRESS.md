@@ -142,22 +142,55 @@
   (marginal comparison is now real-signal, not the birthday artifact).
 - Full computational-binding reduction in the general (non-collision)
   case -- only collision-to-SIS and Eq.(2) are implemented.
-- Extraction of the binary witness from all three transcripts.
+- Extraction of the binary witness from all three transcripts: DONE
+  (`pqct/three_transcript_extraction.py`, 17 tests). Two transcripts
+  give only the divided difference y*b and CANNOT detect a cheating
+  prover, because two points always fit a line. Three transcripts are
+  overdetermined and add, all inversion-free (the ring has zero
+  divisors, so challenge differences are not invertible):
+    * the relaxed MASK, via x_b*g_a - x_a*g_b = -y*t (a plain divided
+      difference discards this);
+    * CROSS-CONSISTENCY (x1-x2)*(g0-g1) == (x0-x1)*(g1-g2), which fails
+      for responses that are not affine in x -- verified by an attack
+      test that perturbs only the third response, passes the pairwise
+      check, and is caught only here;
+    * a binary check B*(y-B) == 0 on the extracted relaxed value, which
+      rejects a relaxed opening of a non-bit.
+  Repeated challenges are REFUSED: y = 0 makes every check vacuous.
+  Still not knowledge soundness -- no proof that every accepting
+  adversary can be rewound into three such transcripts (that is the
+  Fiat-Shamir/QROM item).
 - SHVZK simulator distribution comparison with exact per-index
-  rejection GATE components (the simulator now returns per-index
-  `z_b,i` values and their marginal is compared, but it still has
-  no Rej()-style acceptance/rejection stage to gate them through).
+  rejection GATE components: the simulator now HAS a Lemma 6 abort
+  stage (`pqct/simulator_rejection.py`,
+  `simulate_protocol1_ring_with_abort`) that aborts at the
+  witness-independent rate 1/mu(phi). The honest prover's empirical
+  acceptance rate was measured against 1/mu across phi=1..32 and
+  agrees (at the paper's phi=15: target 0.965069, measured 0.966500).
+  Remaining: the per-index marginals are compared, but no proof that
+  the two full transcript DISTRIBUTIONS are statistically close.
 - Fiat-Shamir proof in the quantum random-oracle setting.
-- Verified (not self-built) Module-SIS/Module-LWE estimate: the REAL
-  malb/lattice-estimator is installed and runnable in a sandboxed WSL
-  user (sage 10.7 + conda-forge; internet-only, LAN-blocked, no sudo),
-  and the call sites are now correct (cost-model INSTANCES not classes,
-  Sage Integers not native ints, L_inf norm not an inflated L2 bound).
-  The tool still cannot COMPLETE in this env: every cost model dies in
-  Sage's mpmath path with "Cannot convert mpz to sage.rings.integer.
-  Integer" (a conda gmpy2/mpfr ABI issue, not our input). So no
-  certified bit number yet -- blocker stays OPEN on the environment,
-  not on the protocol. See docs/VERIFIED_LATTICE_ESTIMATE.md.
+- Verified (not self-built) Module-SIS estimate: the REAL
+  malb/lattice-estimator is installed, sandboxed (WSL user `pqct`,
+  sage 10.7, internet-only, LAN-blocked, no sudo) and NOW RUNS TO
+  COMPLETION. The blocker that stopped it was an mpmath/mpfr `erf`
+  bug in the conda build ("Cannot convert mpz to
+  sage.rings.integer.Integer"), worked around by patching
+  `estimator.prob.gaussian_cdf` to stdlib `math.erf`; see
+  `tools/sage_sis_estimate.py`. It reports 83-113 bits for a scalar
+  bound reading, and the independent delta-criterion in
+  `pqct/msis_hardness.py` gives 92-117 bits with delta agreeing to
+  ~3e-4. Both sit BELOW the paper's claimed 128-bit level, which
+  traces to the legacy delta=1.0045 <-> 128-bit mapping inherited
+  from MatRiCT, not to an arithmetic error. What is STILL open is a
+  cryptographic judgement, not tooling: (a) the exact M-SIS instance
+  for HMC binding has MIXED per-column bounds that a single scalar
+  length_bound cannot express, and (b) delta -> bits is a model
+  choice. See docs/MSIS_HARDNESS.md and
+  docs/VERIFIED_LATTICE_ESTIMATE.md. NOTE: an earlier
+  "trivially easy by counting" verdict was MY error -- it evaluated
+  the Gaussian heuristic at the full column count instead of the
+  optimal sublattice dimension.
 - Independent Rust implementation.
 - Balance/range/conservation composition: integer oracle done
   (`balance_composition`); commitment-level composition done

@@ -189,6 +189,11 @@ from .simulator_rejection import SimulatorRejectionError, measure_simulator_rate
 from .simulator_rejection import simulate_rejection, simulator_acceptance_probability
 from .msis_hardness import HardnessError, MSISHardnessReport, analyze_msis
 from .msis_hardness import blocksize_for_root_hermite, root_hermite_from_blocksize
+from .three_transcript_extraction import RelaxedWitness, ThreeTranscriptError
+from .three_transcript_extraction import ThreeTranscriptExtraction
+from .three_transcript_extraction import extract_all_rows
+from .three_transcript_extraction import extract_from_three_transcripts
+from .three_transcript_extraction import extract_relaxed_witness
 from .protocol1_shvzk_compare import (
     FixedChallengeComparison,
     SHVZKComparisonError,
