@@ -15,6 +15,7 @@ from pqct.ring_commitment import ToyParameters
 class RingCycleMaskTests(unittest.TestCase):
     def setUp(self):
         from pqct.hmc import bounded_ring_element
+        self.bounded_ring_element = bounded_ring_element
         self.params = ToyParameters(n=8, q=17, k=1)
         self.r = lambda values: bounded_ring_element(values, self.params)
 
@@ -30,6 +31,55 @@ class RingCycleMaskTests(unittest.TestCase):
     def test_empty_tail_rejected(self):
         with self.assertRaises(Protocol5Error):
             derive_ring_cycle_mask((), self.params)
+
+    def test_mask_matches_paper_steps4_5_exactly(self):
+        """Gao Protocol 2 steps 4-5 (D_3 convention):
+           step 4: d~_0 = d~_k = 0, sample d~_j ~ D_{3,T3} for j in [1,k)
+           step 5: committed mask d_j = d~_j - 2*d~_{j+1} for j in [0,k)
+        Pin the boundary consequences: d_0 = -2*d~_1 and d_{k-1} = d~_{k-1}.
+        """
+        t1 = self.r((3, 1, -2, 0, 0, 0, 0, 0))
+        t2 = self.r((-1, 2, 0, 0, 0, 0, 0, 0))
+        mask = derive_ring_cycle_mask((t1, t2), self.params)
+        expected_d0 = tuple(-2 * c for c in (3, 1, -2, 0, 0, 0, 0, 0))
+        expected_d2 = (-1, 2, 0, 0, 0, 0, 0, 0)
+        self.assertEqual(mask[0].coeffs, tuple(c % self.params.q for c in expected_d0))
+        self.assertEqual(mask[-1].coeffs, tuple(c % self.params.q for c in expected_d2))
+
+    def test_committed_mask_entries_expand_by_at_most_3(self):
+        """The factor 3 in the verifier bound comes from step 5.
+
+        Each committed d_j = d~_j - 2*d~_{j+1} with |d~| <= T3 entrywise, so
+        |d_j| <= T3 + 2*T3 = 3*T3, and the bound is TIGHT: choosing
+        consecutive rows of OPPOSITE sign attains it exactly
+        (T3 - 2*(-T3) = 3*T3). Same-sign rows cancel instead, so this test
+        must alternate to reach the worst case.
+
+        Step 17's full bound 6*phi_3*T_3*sqrt(d) is then consistent as
+        2 * 3 * phi_3 * T_3 * sqrt(d): the 3 is DERIVED here, sqrt(d) is the
+        L-inf -> L2 conversion over d coefficients, and the remaining factor
+        of 2 is the Gaussian rejection slack at sigma = phi_3*T3 (which this
+        test does NOT prove -- it only pins the mask-transform factor).
+        """
+        T3_bound = 4
+        # q must exceed 2*3*T3_bound = 24 or the tight value WRAPS and the
+        # test would measure modular wraparound instead of the mask bound.
+        # setUp's q=17 is too small; use a ring that can represent +-3*T3.
+        big = ToyParameters(n=8, q=12289, k=1)
+        rb = lambda values: self.bounded_ring_element(values, big)
+        # Alternating signs between consecutive rows attains the 3*T3 bound.
+        rows = ((T3_bound,) * big.n, (-T3_bound,) * big.n, (T3_bound,) * big.n)
+        tail = tuple(rb(row) for row in rows)
+        mask = derive_ring_cycle_mask(tail, big)
+        for element in mask:
+            for coeff in element.coeffs:
+                centered = coeff if coeff <= big.q // 2 else coeff - big.q
+                self.assertLessEqual(abs(centered), 3 * T3_bound)
+        worst = max(
+            abs(c if c <= big.q // 2 else c - big.q)
+            for element in mask for c in element.coeffs
+        )
+        self.assertEqual(worst, 3 * T3_bound)
 
     def test_sign_max(self):
         self.assertEqual(compute_sign_max((1, 1, -1)), 2)

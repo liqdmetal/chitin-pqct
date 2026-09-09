@@ -165,9 +165,17 @@
   The ZK conservation proof (Gao Protocol 5, cycle masking over ring
   elements) is implemented end-to-end in `protocol5`, and Protocol 1 +
   Protocol 5 are composed over shared commitments in
-  `transaction_proof`. Remaining: the third rejection stage's exact
-  D_3 convention (finite-support reference only). Verifier norm bounds
-  are now confirmed to match the paper's step-17 formulas exactly
+  `transaction_proof`. The third rejection stage's D_3 convention is now
+  RESOLVED against the paper: Protocol 2 steps 4-5 give d~_0 = d~_k = 0,
+  d~_j ~ D_{3,T3} for j in [1,k), committed mask d_j = d~_j - 2*d~_{j+1};
+  `derive_ring_cycle_mask` implements exactly this, and the prover samples at
+  sigma = phi_3*T_3 = D_{3,T3}. The step-5 transform DERIVES step 17's factor
+  3 (|d_j| <= 3*T3, tight at alternating signs, test-pinned), so
+  6*phi_3*T_3*sqrt(d) = 2 * 3 * phi_3 * T_3 * sqrt(d) with only the Gaussian
+  rejection-slack factor 2 unpinned. Remaining: all three rejection stages
+  use finite-support Gaussian REFERENCES, not Gao's exact infinite laws --
+  the same D1/D2 caveat (blocker item: exact statistical distance). Verifier
+  norm bounds are confirmed to match the paper's step-17 formulas exactly
   (500-dpi transcription, test-pinned); what remains uncertified is the
   bit-security level (blocker item 5).
 - External cryptanalysis.
