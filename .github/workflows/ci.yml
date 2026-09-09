@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  # Push runs only on master: a bare push trigger fires on every commit twice
+  # (push + PR event), which burns private-repo Actions minutes.
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded PR runs (same branch, newer commit) instead of letting
+# stale runs grind to completion.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: pytest (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Floor (>=3.11) + current stable: same versions devs hit locally.
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          # Validate the lockfile instead of silently re-resolving it; the
+          # suite is research code where exact dependency versions matter.
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - name: Run tests
+        # The project declares zero dependencies by design (research
+        # reference model), so the test-only requirements — pytest and the
+        # pqcrypto backend the authorization tests exercise — are layered in
+        # ephemerally at run time instead of being pinned in pyproject.
+        run: uv run --python ${{ matrix.python-version }} --with pytest --with pqcrypto pytest
