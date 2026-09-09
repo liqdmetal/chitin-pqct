@@ -26,6 +26,10 @@ from .balance_composition import MaskedBalanceResponse
 from .balance_composition import SignedAmount
 from .balance_composition import build_balance_columns
 from .balance_composition import build_masked_balance_response
+from .balance_transcript import AmountCommitment
+from .balance_transcript import BalanceTranscript
+from .balance_transcript import BalanceTranscriptError
+from .balance_transcript import build_balance_transcript
 from .binary_protocol1 import Protocol1Error, Protocol1Parameters, Protocol1Proof, derive_protocol1_challenge, prove_protocol1, verify_protocol1
 from .binary_protocol1_ring import (RingProtocol1Error, RingProtocol1Parameters, RingProtocol1Proof, build_protocol1_ring_transcript, prove_protocol1_ring, verify_protocol1_ring)
 from .binary_hmc import (

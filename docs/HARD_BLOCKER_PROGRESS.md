@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 167 tests pass.
+- 174 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -53,6 +53,12 @@
   (Gao Section 4): SignedAmount decomposition -> per-column c_j ->
   cycle-masked exact-zero response. Caught and fixed a real zip bug in
   the first build (see docs/BALANCE_COMPOSITION.md).
+- `pqct.balance_transcript` composes the integer oracle with real HMC
+  commitments and REAL sampled Protocol 1 binary proofs (per-amount,
+  rejection-gated), plus the eq.(11) homomorphic combination check.
+  Conservation itself is still checked as an exact integer relation
+  against the witnesses, NOT yet a ZK Protocol 5 inner-product proof.
+  See docs/BALANCE_TRANSCRIPT.md.
 
 ## Still open
 
@@ -72,8 +78,10 @@
   real `lattice-estimator` tool.
 - Independent Rust implementation.
 - Balance/range/conservation composition: integer oracle done
-  (`balance_composition`); committing amount bits into an actual
-  Protocol 1/Protocol 5 lattice balance transcript still missing.
+  (`balance_composition`); commitment-level composition done
+  (`balance_transcript`, real Protocol 1 proofs + eq.(11) check).
+  Remaining: the ZK conservation proof itself (Gao Protocol 5
+  inner-product argument with cycle masking over ring elements).
 - External cryptanalysis.
 - `Protocol1DistributionParameters` shares one `gaussian_tail` for both
   `t_profile` (small sigma) and `opening_profile` (larger sigma); tests
