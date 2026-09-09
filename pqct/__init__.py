@@ -20,6 +20,12 @@ from .binary_relation import (
     build_binary_identity,
     verify_binary_identity,
 )
+from .balance_composition import BalanceColumns
+from .balance_composition import BalanceCompositionError
+from .balance_composition import MaskedBalanceResponse
+from .balance_composition import SignedAmount
+from .balance_composition import build_balance_columns
+from .balance_composition import build_masked_balance_response
 from .binary_protocol1 import Protocol1Error, Protocol1Parameters, Protocol1Proof, derive_protocol1_challenge, prove_protocol1, verify_protocol1
 from .binary_protocol1_ring import (RingProtocol1Error, RingProtocol1Parameters, RingProtocol1Proof, build_protocol1_ring_transcript, prove_protocol1_ring, verify_protocol1_ring)
 from .binary_hmc import (

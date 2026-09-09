@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 151 tests pass.
+- 167 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -49,6 +49,10 @@
   SCRIPT's own fixture, not in pqct itself -- root-caused (verified
   the truncated support was 90% flat at its own boundary) and fixed
   by widening tail to 60; see docs/GOODNESS_OF_FIT.md.
+- `pqct.balance_composition` adds the corrector-free balance oracle
+  (Gao Section 4): SignedAmount decomposition -> per-column c_j ->
+  cycle-masked exact-zero response. Caught and fixed a real zip bug in
+  the first build (see docs/BALANCE_COMPOSITION.md).
 
 ## Still open
 
@@ -67,7 +71,9 @@
 - Verified (not self-built) Module-SIS/Module-LWE estimate via the
   real `lattice-estimator` tool.
 - Independent Rust implementation.
-- Balance/range/conservation composition.
+- Balance/range/conservation composition: integer oracle done
+  (`balance_composition`); committing amount bits into an actual
+  Protocol 1/Protocol 5 lattice balance transcript still missing.
 - External cryptanalysis.
 - `Protocol1DistributionParameters` shares one `gaussian_tail` for both
   `t_profile` (small sigma) and `opening_profile` (larger sigma); tests
