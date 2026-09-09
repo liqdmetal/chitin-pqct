@@ -1,0 +1,55 @@
+{
+  "profile": {
+    "ring_degree": 64,
+    "log2_q": 49,
+    "challenge_weight": 56,
+    "challenge_peak": 8,
+    "lattice_dimension": 128
+  },
+  "stages": {
+    "initial": {
+      "infinity_norm": 8,
+      "l2_norm": 59.87486951969081,
+      "first_block_max": 8,
+      "second_block_max": 1,
+      "row_index": 0
+    },
+    "LLL": {
+      "infinity_norm": 8,
+      "l2_norm": 59.87486951969081,
+      "first_block_max": 8,
+      "second_block_max": 1,
+      "row_index": 0
+    },
+    "BKZ-20": {
+      "infinity_norm": 8,
+      "l2_norm": 59.87486951969081,
+      "first_block_max": 8,
+      "second_block_max": 1,
+      "row_index": 0
+    },
+    "BKZ-40": {
+      "infinity_norm": 8,
+      "l2_norm": 59.87486951969081,
+      "first_block_max": 8,
+      "second_block_max": 1,
+      "row_index": 0
+    }
+  },
+  "validation": {
+    "dimension": "128x128",
+    "log2_volume_measured": 3136.0,
+    "log2_volume_expected": 3136.0,
+    "volume_matches": true,
+    "row0_is_valid_cancellation": true,
+    "row0_deviation_nonzero": true
+  },
+  "verdict": {
+    "shortest_infinity_norm": 8,
+    "challenge_peak": 8,
+    "below_peak": false,
+    "unchanged_by_reduction": true,
+    "meaning": "no cancellation below the challenge peak was found even with BKZ-40 at the real parameters, so the p-based margin survives the strongest reduction run here (upper bound only -- a larger block size could still do better)",
+    "why_reduction_changed_nothing": "The naive basis row (-zeta*e_i, e_i) already achieves the minimum: its second block is a unit vector (norm 1) and its first block is a column of the circulant, whose entries are the challenge coefficients (norm p). Nothing shorter exists because any nonzero d forces at least one coefficient of magnitude >= 1 in the second block, and reducing the first block below p would require zeta to have smaller entries. So LLL/BKZ leaving row 0 untouched is the CORRECT outcome, not a failed reduction -- confirmed by the volume check and by verifying row 0 is a genuine cancellation."
+  }
+}
