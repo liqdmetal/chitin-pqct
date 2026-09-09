@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 238 tests pass.
+- 242 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -111,8 +111,15 @@
   `z_b,i` values and their marginal is compared, but it still has
   no Rej()-style acceptance/rejection stage to gate them through).
 - Fiat-Shamir proof in the quantum random-oracle setting.
-- Verified (not self-built) Module-SIS/Module-LWE estimate via the
-  real `lattice-estimator` tool.
+- Verified (not self-built) Module-SIS/Module-LWE estimate: the REAL
+  malb/lattice-estimator now runs in a sandboxed WSL user (sage 10.7 +
+  conda-forge; internet-only, LAN-blocked, no sudo). It caught a genuine
+  defect in our self-built estimator (missing "beta >= q -> trivially
+  easy" ill-posedness guard), now fixed and test-pinned. Still open:
+  the ring-relation -> integer-SIS NORM MAPPING dominates the answer
+  (our conservative sqrt(cols) inflation pushes even feasible gamma_bin
+  back over q), so no certified bit number is claimed. Needs a lattice
+  cryptographer. See docs/VERIFIED_LATTICE_ESTIMATE.md.
 - Independent Rust implementation.
 - Balance/range/conservation composition: integer oracle done
   (`balance_composition`); commitment-level composition done

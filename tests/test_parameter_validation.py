@@ -16,10 +16,40 @@ class Protocol1ValidationTests(unittest.TestCase):
         )
         self.assertTrue(v.q_precondition_holds)
         self.assertGreater(v.gamma_bin_required, 0)
+        # FINDING: gamma_bin (1.23e15) EXCEEDS q (5.63e14) for the paper
+        # profile under our norm-mapping interpretation, so Gao Eq.(2)'s
+        # min{q, ...} > beta can never hold and the SIS instance is
+        # trivially easy. The estimator now REFUSES it instead of
+        # reporting a plausible-looking bit number. Verified
+        # malb/lattice-estimator rejects the same input with
+        # "SIS trivially easy. Please set norm bound < q."
+        self.assertIsNone(v.hardness)
+        self.assertIn("trivially easy", v.note)
+        self.assertGreaterEqual(v.gamma_bin_required, Decimal(PAPER_Q))
+
+    def test_feasible_phi1_yields_a_real_hardness_number(self):
+        """With phi1 below the gamma_bin < q crossover, a real estimate exists.
+
+        The verified Sage estimator reports max phi1 ~ 7.436 for the paper
+        profile; phi1=4 sits inside that feasible region, so the chain must
+        produce an actual bit-security number rather than refusing.
+        """
+        v = validate_protocol1_parameters(
+            q=PAPER_Q, n=29, d=64, w=56, p=8, k=64,
+            phi1=Decimal(4), phi2=Decimal(11), B=1, m=60,
+        )
+        self.assertTrue(v.q_precondition_holds)
+        self.assertLess(v.gamma_bin_required, Decimal(PAPER_Q))
         self.assertIsNotNone(v.hardness)
         self.assertGreater(v.hardness.classical_bits, 0)
         self.assertGreater(v.hardness.classical_bits, v.hardness.quantum_bits)
-        self.assertIn("precondition OK", v.note)
+
+    def test_gamma_bin_above_q_refuses_hardness(self):
+        """Pins the guard: beta >= q means Gao Eq.(2) can never hold."""
+        from pqct.lattice_estimate import LatticeEstimateError, estimate_sis_hardness
+        with self.assertRaises(LatticeEstimateError) as caught:
+            estimate_sis_hardness(n=29, d=64, q=PAPER_Q, beta_bound=PAPER_Q)
+        self.assertIn("trivially easy", str(caught.exception))
 
     def test_toy_fixture_fails_precondition(self):
         """The lab's toy params do NOT meet Theorem 1's q/2 condition.

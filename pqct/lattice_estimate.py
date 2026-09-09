@@ -125,6 +125,19 @@ def estimate_sis_hardness(
         raise LatticeEstimateError("n, d, q must be positive with q>2")
     if beta_bound <= 0:
         raise LatticeEstimateError("beta_bound must be positive")
+    if beta_bound >= q:
+        # Gao Eq.(2) is min{q, 2^(2*sqrt(n*d*log2(q)*log2(delta)))} > beta.
+        # If beta >= q the left side is <= q <= beta, so the condition can
+        # NEVER hold for any delta: the SIS instance is trivially easy and
+        # no bit-security figure is meaningful. The verified
+        # malb/lattice-estimator refuses the same input with
+        # "SIS trivially easy. Please set norm bound < q." -- this guard
+        # makes the self-built estimator refuse it too instead of silently
+        # returning a plausible-looking number.
+        raise LatticeEstimateError(
+            f"beta_bound ({beta_bound}) >= q ({q}): instance trivially easy, "
+            "no hardness estimate is meaningful"
+        )
     log2_beta = log2(float(beta_bound))
     denominator = 4.0 * n * d * log2(float(q))
     if denominator <= 0:
