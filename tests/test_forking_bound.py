@@ -62,13 +62,17 @@ class KnowledgeErrorTests(unittest.TestCase):
                 fs_knowledge_error_classical(shape, q) - base, math.log2(q + 1), places=9
             )
 
-    def test_qrom_loss_is_2mu_times_log2_2q_plus_1(self):
+    def test_qrom_loss_is_dfm20_corollary_13(self):
+        """n!/(2q+n+1)^(2n): 2n*log2(2q+n+1) - log2(n!). At n=2, q=2^64
+        this is ~259.0, one bit below the old (2q+1)^(2n) placeholder."""
         shape = chitin_tree()
         base = interactive_knowledge_error(shape)
         q = 2 ** 64
+        n = shape.rounds
+        expected = 2 * n * math.log2(2 * q + n + 1) - math.log2(math.factorial(n))
         self.assertAlmostEqual(
             fs_knowledge_error_qrom_conservative(shape, q) - base,
-            2 * 2 * math.log2(2 * q + 1), places=9,
+            expected, places=9,
         )
 
     def test_zero_queries_rejected(self):

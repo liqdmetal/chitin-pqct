@@ -217,16 +217,21 @@ def default_losses(quantum_queries: int = 2 ** 64) -> tuple:
             established=True,
         ),
         Loss(
-            name="QROM penalty beyond classical (conservative)",
+            name="QROM penalty beyond classical (DFM'20, TIGHT)",
             bits=report.qrom_loss_bits - report.classical_loss_bits,
             basis=(
-                f"measure-and-reprogram per round, (2Q+1)^(2mu): total QROM "
-                f"loss {report.qrom_loss_bits:.1f} bits, of which "
-                f"{report.classical_loss_bits:.1f} is already counted above. "
-                f"AFK'22's tighter quantum extension would reduce this but "
-                f"needs the protocol's collapsing-type hypotheses confirmed."
+                f"Don-Fehr-Majenz CRYPTO'20 Cor.13: multiplicative loss "
+                f"n!/(2q+n+1)^(2n) for the 2-round FS transform = "
+                f"{report.qrom_loss_bits:.1f} bits total, of which "
+                f"{report.classical_loss_bits:.1f} is already the classical "
+                f"AFK'22 term. DFM'20 Sec.6 proves q^(2n) is TIGHT (Grover "
+                f"lower bound, up to a rounds-only constant), so no tighter "
+                f"generic QROM theorem exists to cite. This is the true price "
+                f"of the QROM for a 2-round protocol, not slack. The only way "
+                f"to reduce it is structural: collapse to 1 round via "
+                f"non-adaptive zeta (worth ~130 bits; see pqct/qrom_bound)."
             ),
-            established=False,
+            established=True,
         ),
         Loss(
             name="truncation (finite-support Gaussians)",

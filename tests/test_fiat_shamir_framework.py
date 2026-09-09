@@ -83,7 +83,7 @@ class ResidualBudgetTests(unittest.TestCase):
         """forking_loss + qrom_loss = full conservative QROM loss (260 at 2^64)."""
         framework = paper_framework(quantum_queries=2 ** 64)
         total = framework.forking_loss + framework.qrom_loss
-        self.assertAlmostEqual(total, 260.0, delta=0.5)
+        self.assertAlmostEqual(total, 259.0, delta=0.5)
 
     def test_classical_residual_is_comfortable(self):
         """256 soundness - 64 classical loss = ~190 bits. This is the

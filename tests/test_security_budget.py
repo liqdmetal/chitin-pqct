@@ -77,7 +77,7 @@ class BudgetArithmeticTests(unittest.TestCase):
         (196) + truncation (0) = 260 at Q=2^64. Previously asserted 256 for
         the two placeholders (128+128); the computed bound replaced them."""
         budget = paper_budget(quantum_queries=2 ** 64)
-        self.assertAlmostEqual(budget.total_loss, 260.0, places=1)
+        self.assertAlmostEqual(budget.total_loss, 259.0, places=1)
         self.assertAlmostEqual(
             budget.total_loss, sum(l.bits for l in budget.losses), places=6
         )
@@ -102,12 +102,11 @@ class HonestyTests(unittest.TestCase):
     def test_verdict_names_every_blocker(self):
         verdict = paper_budget().verdict
         self.assertIn("NO CLAIM", verdict)
-        # M-LWE is no longer a blocker; the losses and residual still are.
+        # Every component is certified and BOTH FS losses are now established
+        # (AFK'22 classical, DFM'20 QROM -- the latter TIGHT). The ONLY
+        # remaining blocker is the negative residual itself.
         self.assertNotIn("uncertified component", verdict)
-        # The classical FS loss is now ESTABLISHED (AFK'22), so it no longer
-        # appears as a blocker; the QROM penalty does, and so does the
-        # negative residual.
-        self.assertIn("QROM", verdict)
+        self.assertNotIn("unestablished", verdict)
         self.assertIn("non-positive", verdict)
 
     def test_certification_is_a_gate_independent_of_arithmetic(self):

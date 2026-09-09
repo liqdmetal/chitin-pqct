@@ -135,18 +135,19 @@ def fs_knowledge_error_classical(shape: TreeShape, queries: int) -> float:
 
 
 def fs_knowledge_error_qrom_conservative(shape: TreeShape, queries: int) -> float:
-    """Conservative QROM figure: (2Q+1)^(2 mu) * kappa (measure-and-reprogram
-    applied per round, DFMS'22 style). Returns log2.
+    """QROM knowledge error via Don-Fehr-Majenz CRYPTO'20 Corollary 13.
 
-    This is deliberately the PESSIMISTIC quantum bound. AFK'22 also give a
-    quantum extension that is tighter, but instantiating it requires
-    confirming the protocol meets their "collapsing"-type hypotheses,
-    which is an open obligation here. Report the loose one.
+    Multiplicative loss n!/(2q+n+1)^(2n) for a (2n+1)-round PCIP. DFM'20
+    Section 6 proves the q^(2n) dependence is TIGHT (Grover lower bound),
+    so this is not a conservative placeholder any more -- it is the actual
+    bound, and no tighter generic theorem can exist. Named "conservative"
+    historically; kept for API stability.
     """
+    n = shape.rounds
     if queries <= 0:
         raise ForkingError("queries must be positive")
-    per_round = math.log2(2 * queries + 1)
-    return interactive_knowledge_error(shape) + 2 * shape.rounds * per_round
+    loss = 2 * n * math.log2(2 * queries + n + 1) - math.log2(math.factorial(n))
+    return interactive_knowledge_error(shape) + loss
 
 
 def placeholder_loss_bits(shape: TreeShape, queries: int) -> float:
