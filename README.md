@@ -1,8 +1,14 @@
-# PQ-CT Research Lab
+# Chitin — PQ-CT Research Lab
 
-Post-quantum confidential-account transaction research for a future DERO-compatible account mode.
+**Chitin** is the working name for this construction: chitin is the polymer
+mycelial cell walls are made of — the rigid structure that makes the organism
+hard to break. It sits in the Spore → Mycelium → Sap → Physarum → Rhizome
+line as that organism's actual armor. Name verified clear of existing
+crypto/PQ projects (only the biopolymer uses it).
 
-**Status: research prototype only.** Nothing here is consensus-safe, production cryptography, or a quantum-proof claim.
+Post-quantum *resistant* confidential-account transaction research for a future DERO-compatible account mode.
+
+**Status: research prototype only.** Nothing here is consensus-safe, production cryptography, or a claim of absolute quantum-proofness. Several real attacks were found and fixed during development (see docs/HARD_BLOCKER_PROGRESS.md); the soundness, SHVZK and Fiat–Shamir *proofs* are still absent, and no certified bit-security level exists.
 
 ## First milestone
 

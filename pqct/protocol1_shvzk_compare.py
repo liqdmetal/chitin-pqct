@@ -338,7 +338,7 @@ def compare_fixed_challenge(
         try:
             masks = sample_protocol1_masks(_source(seed, b"honest-masks", index), base_key.params, len(normalized_bits), width, base_key.randomness_width, p, w, distribution)
             honest_proof = build_protocol1_ring_transcript(statement, base_key, key_e, key_f, key_g, public, normalized_bits, normalized_openings, masks.t, masks.r_e, masks.r_f, masks.r_t, params, zeta=zeta, challenge_x=challenge_x)
-            honest_ok = verify_protocol1_ring(statement, base_key, key_e, key_f, key_g, public, honest_proof, params, zeta=zeta, challenge_x=challenge_x)
+            honest_ok = verify_protocol1_ring(statement, base_key, key_e, key_f, key_g, public, honest_proof, params, zeta=zeta, challenge_x=challenge_x, enforce_fiat_shamir=False)
             if honest_ok:
                 per_index_zb = tuple(
                     tuple(
@@ -391,7 +391,7 @@ def compare_fixed_challenge(
                 response_zb_components=response_zb_components,
             )
             simulator_proof = simulated.proof
-            simulator_ok = verify_protocol1_ring(statement, base_key, key_e, key_f, key_g, public, simulator_proof, params, zeta=zeta, challenge_x=challenge_x)
+            simulator_ok = verify_protocol1_ring(statement, base_key, key_e, key_f, key_g, public, simulator_proof, params, zeta=zeta, challenge_x=challenge_x, enforce_fiat_shamir=False)
             # Per Gao Appendix B's SHVZK construction, the simulator draws
             # g_i,j ~ D_{1,T1}^d and (z_g,(z_b,i)) ~ D_{2,T2}^{md} DIRECTLY --
             # these ARE the target laws that honest Rej() acceptance converges

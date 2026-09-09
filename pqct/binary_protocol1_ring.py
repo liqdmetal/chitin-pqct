@@ -423,8 +423,19 @@ def verify_protocol1_ring(
     *,
     zeta: RingElement | None = None,
     challenge_x: RingElement | None = None,
+    enforce_fiat_shamir: bool = True,
 ) -> bool:
-    """Verify Protocol 1's public equations and Euclidean response bounds."""
+    """Verify Protocol 1's public equations and Euclidean response bounds.
+
+    When enforce_fiat_shamir is true (the default) zeta and x are always
+    derived from the transcript, and any caller-supplied value that differs
+    causes rejection. See the note on the forgery vector below -- supplying
+    your own challenges makes this verifier forgeable.
+
+    Set enforce_fiat_shamir=False ONLY in the fixed-challenge SHVZK/simulator
+    research labs, which must evaluate honest and simulated transcripts at one
+    common (zeta, x). Never use it in a real verifier.
+    """
     try:
         _check_key_shapes(base_key, key_e, key_f, key_g)
         public = tuple(tuple(row) for row in bit_commitments)
@@ -458,17 +469,41 @@ def verify_protocol1_ring(
         if _l2_norm(proof.response_zb) > Decimal(params.zb_bound):
             return False
 
-        zeta = zeta if zeta is not None else _derive_zeta(
+        derived_zeta = _derive_zeta(
             statement, base_key, key_e, key_f, key_g, public, params,
         )
+        if not enforce_fiat_shamir:
+            # Research-lab escape hatch: fixed (zeta, x) so honest and
+            # simulated transcripts can be compared at one challenge. This
+            # re-opens the forgery vector below -- never use in production.
+            zeta = zeta if zeta is not None else derived_zeta
+        else:
+            if zeta is not None and zeta != derived_zeta:
+                return False
+            zeta = derived_zeta
         if zeta.params != base_key.params:
             return False
         zeta_powers = _ring_powers(zeta, count)
-        x = challenge_x if challenge_x is not None else _derive_x(
+
+        derived_x = _derive_x(
             statement, base_key, key_e, key_f, key_g, public,
             (proof.commitment_e, proof.commitment_f, proof.commitment_g),
             zeta, params,
         )
+        if not enforce_fiat_shamir:
+            x = challenge_x if challenge_x is not None else derived_x
+        else:
+            # FS binding is load-bearing. The public equations are
+            #   x*weighted_public + commitment_g = Com(weighted_g; z_b)
+            #   x*commitment_e + commitment_f   = Com(e; z_g).
+            # Whoever picks x picks small responses FIRST and solves both
+            # commitments backwards, so a forged binary proof verifies for ANY
+            # commitments -- including ones encoding no bits at all. zeta is
+            # equally load-bearing: it sets weighted_public/weighted_g, so a
+            # chosen zeta lets the attacker pick the aggregation too.
+            if challenge_x is not None and challenge_x != derived_x:
+                return False
+            x = derived_x
         if x.params != base_key.params:
             return False
         weighted_public = _sum_vectors(public, base_key.params, zeta_powers)

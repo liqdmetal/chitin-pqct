@@ -53,9 +53,13 @@ class CrossImplementationProtocol1Tests(unittest.TestCase):
             self.bits, self.openings, self.masks, self.re, self.rf, self.rt,
             self.params_p1, zeta=self.zeta, challenge_x=self.x,
         )
+        # Fixed-challenge cross-implementation test: both verifiers are fed
+        # the SAME hand-constructed (zeta, x) to compare their algebra, so FS
+        # enforcement is disabled deliberately. This is not a verifier claim.
         self.assertTrue(verify_protocol1_ring(
             b"cross", self.base, self.e, self.f, self.g, commitments, proof,
             self.params_p1, zeta=self.zeta, challenge_x=self.x,
+            enforce_fiat_shamir=False,
         ))
         raw_transcript = build_independent_transcript(
             self._raw_key(self.base), self._raw_key(self.e), self._raw_key(self.f),

@@ -299,6 +299,7 @@ def verify_linear_equation(
     proof: Protocol5Proof,
     p5: Protocol5Parameters,
     challenge_x: RingElement | None = None,
+    enforce_fiat_shamir: bool = True,
 ) -> Protocol5Verification:
     """Gao Protocol 2 verifier steps 16-17 (minus Vbin composition).
 
@@ -340,11 +341,27 @@ def verify_linear_equation(
             for total, value in zip(c_commitment, row)
         )
 
-    x = challenge_x
-    if x is None:
-        x = derive_protocol5_challenge(statement, params, p5, public, proof.commitment_d)
-    if x.params != params:
+    derived_x = derive_protocol5_challenge(statement, params, p5, public, proof.commitment_d)
+    if derived_x.params != params:
         raise Protocol5Error("challenge parameter mismatch")
+    if enforce_fiat_shamir:
+        # FS binding is load-bearing. The commitment equation is
+        #   x*C + D = Com(f; z).
+        # If a caller may choose x, they choose small f and z FIRST and then
+        # set D = Com(f; z) - x*C. The equation then holds for ANY public
+        # commitments -- including non-conserving ones -- and every norm gate
+        # passes, so a forged proof would verify. The verifier must therefore
+        # derive x itself from statement, B_i's and D.
+        if challenge_x is not None and challenge_x != derived_x:
+            raise Protocol5Error(
+                "challenge_x does not match the Fiat-Shamir derived challenge"
+            )
+        x = derived_x
+    else:
+        # Escape hatch for the fixed-challenge SHVZK/simulation research labs,
+        # which must compare honest and simulated transcripts AT one x. Never
+        # use this in a real verifier: it re-opens the forgery vector above.
+        x = challenge_x if challenge_x is not None else derived_x
 
     f0_int = reconstruct_f0_over_integers(proof.response_tail)
     gate_range = f0_in_canonical_range(f0_int, params.q)

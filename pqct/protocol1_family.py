@@ -409,9 +409,14 @@ def build_second_layer_family(
         bits, openings, masks_t, mask_opening_e, mask_opening_f, mask_openings_t, params,
     ) for proof, challenge in zip(proofs, challenges))
     for challenge, proof in zip(challenges, proofs):
+        # This is a REWINDING experiment, not a real verifier: the family
+        # deliberately holds zeta fixed and varies x across three transcripts
+        # so the extractor can difference them. FS enforcement would reject
+        # exactly that, so the escape hatch is explicit and local. The
+        # extraction output is a relaxed opening, never an acceptance claim.
         if not verify_protocol1_ring(
             statement, base_key, key_e, key_f, key_g, bit_commitments, proof, params,
-            zeta=zeta, challenge_x=challenge,
+            zeta=zeta, challenge_x=challenge, enforce_fiat_shamir=False,
         ):
             raise FamilyError("generated transcript failed explicit verifier")
     extraction = extract_second_layer(

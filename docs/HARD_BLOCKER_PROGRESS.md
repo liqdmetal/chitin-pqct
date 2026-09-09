@@ -108,6 +108,25 @@
   the false goodness-of-fit REJECT. Default stays off so existing callers
   are unaffected. Protocol 5's `_tail_for_sigma` delegates to the same
   single source.
+- **CHALLENGE-INJECTION FORGERY closed in BOTH verifiers** (the most serious
+  finding this session). `verify_linear_equation` (Protocol 5) and
+  `verify_protocol1_ring` (Protocol 1) let a CALLER pass `challenge_x` (and,
+  for P1, `zeta`). Whoever picks the challenge picks small responses first
+  and solves the commitment equations backwards:
+    P5: D = Com(f; z) - x*C  -- forges "conservation" for non-conserving sums
+    P1: commitment_g = Com(weighted_g; z_b) - x*weighted_public
+        commitment_f = Com(e; z_g) - x*commitment_e
+        -- forges a "binary" proof for commitments encoding NO bits (7, 9, 3).
+  Both forgeries were DEMONSTRATED to succeed (the tests assert the insecure
+  path ACCEPTS, proving the vector real rather than theoretical), then closed:
+  `enforce_fiat_shamir=True` is now the DEFAULT, deriving challenges from the
+  transcript and rejecting any caller value that differs. The escape hatch
+  `enforce_fiat_shamir=False` exists ONLY for the fixed-challenge research
+  labs (SHVZK compare, family rewinding, cross-implementation) -- 4 call
+  sites updated to opt out explicitly, each commented as not-a-verifier.
+  Note: `verify_transaction` was never affected (it passes no challenges),
+  which is itself evidence the witness-free verifier is the right boundary.
+  14 new adversarial tests (13 P5 + 1 P1 injection); 273 total.
 - Gao's published binding numbers reproduced from the transcribed
   Section 8 formulas: 2*gamma_bin = 2.864e14 (paper prints ~2.86e14) and
   Eq.(2) RHS = 4.100e14 (paper prints ~4.10e14). This RETIRES the earlier
