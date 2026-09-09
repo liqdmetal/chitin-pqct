@@ -109,11 +109,17 @@ class HonestyTests(unittest.TestCase):
 
     def test_assessment_states_the_residual_gap(self):
         """This narrows the question; it does not answer it. The module must
-        say so, including WHAT the remaining problem is."""
+        say so, and must cross-reference the follow-up that refuted the
+        sqrt(q) bound so the two modules cannot be read as agreeing for the
+        same reason."""
         report = assessment(self.zeta, norm_budget=1)
         self.assertEqual(report["status"], "NARROWED, not closed")
-        self.assertIn("lattice problem", report["residual_gap"])
-        self.assertIn("cryptographer", report["residual_gap"])
+        gap = report["residual_gap"]
+        self.assertIn("SUPERSEDED IN PART", gap)
+        self.assertIn("cancellation_bound", gap)
+        self.assertIn("REFUTED", gap)
+        self.assertIn("LLL/BKZ", gap)
+        self.assertIn("should not", gap.replace("Do not", "should not"))
 
     def test_negative_result_is_not_called_security(self):
         result = trivial_cancellation(self.zeta, accounts=2, norm_budget=1)
