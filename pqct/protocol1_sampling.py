@@ -79,6 +79,13 @@ class FiniteDiscreteGaussian:
     def __post_init__(self) -> None:
         if self.sigma <= 0 or self.tail < 0:
             raise SamplingError("sigma must be positive and tail nonnegative")
+        denominator = Decimal(2) * self.sigma * self.sigma
+        weights = tuple(
+            (-(Decimal(value * value) / denominator)).exp()
+            for value in range(-self.tail, self.tail + 1)
+        )
+        object.__setattr__(self, "_weights", weights)
+        object.__setattr__(self, "_total_weight", sum(weights, Decimal(0)))
 
     @property
     def support(self) -> tuple[int, ...]:
@@ -86,12 +93,11 @@ class FiniteDiscreteGaussian:
 
     @property
     def weights(self) -> tuple[Decimal, ...]:
-        denominator = Decimal(2) * self.sigma * self.sigma
-        return tuple((-(Decimal(value * value) / denominator)).exp() for value in self.support)
+        return self._weights
 
     @property
     def total_weight(self) -> Decimal:
-        return sum(self.weights, Decimal(0))
+        return self._total_weight
 
     @property
     def omitted_tail_bound(self) -> float:

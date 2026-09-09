@@ -37,6 +37,18 @@ from .linear_equation_transcript import check_commitment_equation
 from .linear_equation_transcript import compute_response_tail
 from .linear_equation_transcript import f0_in_canonical_range
 from .linear_equation_transcript import reconstruct_f0_over_integers
+from .protocol5 import Protocol5Error
+from .protocol5 import Protocol5Parameters
+from .protocol5 import Protocol5Proof
+from .protocol5 import Protocol5Result
+from .protocol5 import Protocol5Verification
+from .protocol5 import compute_sign_max
+from .protocol5 import compute_t3
+from .protocol5 import derive_protocol5_challenge
+from .protocol5 import derive_ring_cycle_mask
+from .protocol5 import prove_linear_equation
+from .protocol5 import ring_cycle_mask_weighted_sum_is_zero
+from .protocol5 import verify_linear_equation
 from .binary_protocol1 import Protocol1Error, Protocol1Parameters, Protocol1Proof, derive_protocol1_challenge, prove_protocol1, verify_protocol1
 from .binary_protocol1_ring import (RingProtocol1Error, RingProtocol1Parameters, RingProtocol1Proof, build_protocol1_ring_transcript, prove_protocol1_ring, verify_protocol1_ring)
 from .binary_hmc import (

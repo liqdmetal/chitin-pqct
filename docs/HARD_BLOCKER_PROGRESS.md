@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 182 tests pass.
+- 191 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -66,6 +66,14 @@
   discrimination: a cheat with sum 2^j c_j == q (0 mod q, nonzero over
   Z) is CAUGHT by the range gate; honest transcripts pass. See
   docs/LINEAR_EQUATION_TRANSCRIPT.md.
+- `pqct.protocol5` is the end-to-end Protocol 5 prover/verifier: ring
+  cycle mask, T3/T2' formulas, per-profile tails, two rejection stages
+  with abort/retry, verifier never sees c or r_c. Test-verified: the
+  mod-q cheat (+16+16-15=17=q at q=17) cannot produce an accepted
+  proof; honest conserved transactions prove and verify. See
+  docs/PROTOCOL5.md. Also fixed a real perf trap: FiniteDiscreteGaussian
+  weights are now cached (tail~940 was recomputing ~240k Decimal exp()
+  per sample, timing out 512-attempt runs).
 
 ## Still open
 
@@ -90,14 +98,17 @@
   Remaining: the ZK conservation proof itself (Gao Protocol 5
   inner-product argument with cycle masking over ring elements) --
   ring-level machinery now exists in `linear_equation_transcript`;
-  what's left is the third rejection stage (phi_3/T_3) and end-to-end
-  composition with the Protocol 1 binary proofs.
+  end-to-end prover/verifier now exists in `protocol5` (conservation
+  given committed bits). Remaining: composing Protocol 1 binary proofs
+  with Protocol 5 into one full run, and the third rejection stage's
+  exact D_3 convention (finite-support reference only).
 - External cryptanalysis.
 - `Protocol1DistributionParameters` shares one `gaussian_tail` for both
   `t_profile` (small sigma) and `opening_profile` (larger sigma); tests
   must hand-tune a shared value, risking exactly the truncation bug
-  found and fixed this session. Per-profile tails would remove that
-  footgun.
+  found and fixed this session. `protocol5._tail_for_sigma` (~6*sigma
+  per profile) is the demonstrated fix pattern; folding it back into
+  Protocol1DistributionParameters remains to do.
 
 ## Boundary
 
