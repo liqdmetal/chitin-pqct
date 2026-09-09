@@ -99,6 +99,39 @@ Gao's calibrated `D_1,T1` / `D_2,T2` shape closely enough for
 indistinguishability. It is not evidence against Gao's theorem -- the surrogate
 sampling parameters, not the theorem, are the suspect.
 
+## CORRECTION: the above "distinguishable" reading was too pessimistic
+
+The `conditioned_*_tv ~= 1` is the SAME full-tuple birthday-bound artifact
+described at the top of this file, not evidence of a real law mismatch. The
+sharp per-coefficient test is `tools/shvzk_phi_sweep.py`, which measures the
+honest marginal AT A WITNESS-BEARING POSITION (a bit=1 coordinate, where
+honest `g = x*b + t` carries a real `+x` shift that Lyubashevsky rejection
+must flatten back toward `D_{1,T1}`).
+
+Measured (400 samples/phi, x=unit so raw shift is +1 on coeff 0):
+
+```text
+WITNESS position (0,1), bit=1:
+  phi=1  honest_mean=-0.037  sim=-0.053  gap z=+0.15  accepts=95/400
+  phi=2  honest_mean=-0.075  sim=-0.087  gap z=+0.07  accepts=175/400
+  phi=4  honest_mean=-0.126  sim=-0.190  gap z=+0.20  accepts=225/400
+  phi=8  honest_mean=-0.348  sim=-0.380  gap z=+0.05  accepts=243/400
+  flattened: True   (no honest mean anywhere near the +0.125 raw-shift value)
+```
+
+The honest mean is nowhere near the `+1/n`-scale raw witness shift it would
+carry WITHOUT rejection; it tracks the simulator within finite-sample noise
+(|z| <= 0.20 at every phi). Acceptance rises with phi (95->243/400), matching
+the wider-mask-means-fewer-rejects prediction. This is the rejection-sampling
+mechanism of Lemma 6 visibly working in the toy harness: Rej flattens the
+witness-dependent shift so accepted honest g matches the simulator's direct
+D_{1,T1} draw.
+
+This does NOT prove SHVZK. It shows the first-moment behavior is consistent
+with the claimed mechanism at one witness position over four phi values; a
+full indistinguishability argument needs the exact infinite-D_sigma law, the
+complete joint distribution, and the computational-hiding reduction for E.
+
 ## Boundary
 
 This remains a finite toy experiment. It does not establish Gao's exact

@@ -96,6 +96,41 @@ class Protocol1SHVZKComparisonTests(unittest.TestCase):
         self.assertGreaterEqual(result.marginal_zb_stats.exact_tv, 0)
         self.assertLessEqual(result.marginal_zb_stats.exact_tv, 1)
 
+    def test_g_position_selects_the_marginal_source(self):
+        """g_position must pick which (row,col) of responses_g is collected.
+
+        Fixture bits: row0=(0,1), row1=(1,0) -- positions (0,1) and (1,0)
+        bear witness value 1, (0,0) and (1,1) bear 0. Different positions
+        must give different collected samples (not silently the same).
+        """
+        kwargs = dict(
+            distribution=self.distribution, params=self.proof_params,
+            zeta=self.zeta, challenge_x=self.x, samples=64,
+        )
+        from pqct.protocol1_shvzk_compare import compare_fixed_challenge
+        result_a = compare_fixed_challenge(
+            b"pos-seed", b"statement", self.base, self.e, self.f, self.g,
+            self.commitments, self.bits, self.openings, 1, 2,
+            g_position=(0, 1), **kwargs,
+        )
+        result_b = compare_fixed_challenge(
+            b"pos-seed", b"statement", self.base, self.e, self.f, self.g,
+            self.commitments, self.bits, self.openings, 1, 2,
+            g_position=(1, 1), **kwargs,
+        )
+        self.assertNotEqual(result_a.honest_g_samples, result_b.honest_g_samples)
+
+    def test_g_position_out_of_bounds_rejected(self):
+        from pqct.protocol1_shvzk_compare import compare_fixed_challenge
+        with self.assertRaises(SHVZKComparisonError):
+            compare_fixed_challenge(
+                b"pos-seed", b"statement", self.base, self.e, self.f, self.g,
+                self.commitments, self.bits, self.openings, 1, 2,
+                distribution=self.distribution, params=self.proof_params,
+                zeta=self.zeta, challenge_x=self.x, samples=8,
+                g_position=(5, 5),
+            )
+
     def test_invalid_sample_count_rejected(self):
         with self.assertRaises(SHVZKComparisonError):
             compare_fixed_challenge(

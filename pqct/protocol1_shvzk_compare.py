@@ -293,8 +293,20 @@ def compare_fixed_challenge(
     openings: Sequence[Sequence[RingElement]], p: int, w: int,
     distribution: Protocol1DistributionParameters, params: RingProtocol1Parameters,
     zeta: RingElement, challenge_x: RingElement, samples: int,
+    *,
+    g_position: tuple[int, int] = (0, 0),
 ) -> FixedChallengeComparison:
-    """Compare honest and simulated finite fixed-challenge transcript laws."""
+    """Compare honest and simulated finite fixed-challenge transcript laws.
+
+    ``g_position`` selects which (row, column) g_{i,j} marginal to collect.
+    Lemma 6's witness-hiding is only observable at a position whose TRUE bit
+    is 1 (honest g = x*b + t carries a witness-dependent shift that Rej must
+    flatten); at a b=0 position there is no shift to hide, so the marginal
+    says nothing about the flattening mechanism. Callers testing Lemma 6
+    behavior must point this at a witness-bearing position.
+    """
+    if len(g_position) != 2 or g_position[0] < 0 or g_position[1] < 0:
+        raise SHVZKComparisonError("g_position must be a nonnegative (row, column)")
     if not seed or not statement or samples <= 0:
         raise SHVZKComparisonError("seed, statement, and samples must be positive")
     if any(key.params != base_key.params for key in (key_e, key_f, key_g)):
@@ -307,6 +319,8 @@ def compare_fixed_challenge(
     if not public or len(public) != len(normalized_bits) or len(public) != len(normalized_openings):
         raise SHVZKComparisonError("public/witness dimensions differ")
     width = len(normalized_bits[0])
+    if g_position[0] >= len(normalized_bits) or g_position[1] >= width:
+        raise SHVZKComparisonError("g_position out of bounds for the witness matrix")
     honest_response = Counter[bytes](); simulator_response = Counter[bytes]()
     honest_transcript = Counter[bytes](); simulator_transcript = Counter[bytes]()
     honest_conditioned_response = Counter[bytes](); simulator_conditioned_response = Counter[bytes]()
@@ -387,7 +401,7 @@ def compare_fixed_challenge(
             simulator_ok = False
         if honest_ok and honest_proof is not None:
             honest_accepts += 1; response = encode_response_tuple(honest_proof); transcript = encode_fixed_transcript(statement, base_key, key_e, key_f, key_g, public, zeta, challenge_x, honest_proof); honest_response[response] += 1; honest_transcript[transcript] += 1; honest_conditioned_response[response] += 1; honest_conditioned_transcript[transcript] += 1
-            honest_g_coeffs.extend(centered_coefficients(honest_proof.responses_g[0][0]))
+            honest_g_coeffs.extend(centered_coefficients(honest_proof.responses_g[g_position[0]][g_position[1]]))
             honest_zg_coeffs.extend(centered_coefficients(honest_proof.response_zg[0]))
             if honest_per_index_zb is not None:
                 honest_zb_coeffs.extend(
@@ -397,7 +411,7 @@ def compare_fixed_challenge(
             honest_response[_REJECT] += 1; honest_transcript[_REJECT] += 1
         if simulator_ok and simulator_proof is not None:
             simulator_accepts += 1; response = encode_response_tuple(simulator_proof); transcript = encode_fixed_transcript(statement, base_key, key_e, key_f, key_g, public, zeta, challenge_x, simulator_proof); simulator_response[response] += 1; simulator_transcript[transcript] += 1; simulator_conditioned_response[response] += 1; simulator_conditioned_transcript[transcript] += 1
-            simulator_g_coeffs.extend(centered_coefficients(simulator_proof.responses_g[0][0]))
+            simulator_g_coeffs.extend(centered_coefficients(simulator_proof.responses_g[g_position[0]][g_position[1]]))
             simulator_zg_coeffs.extend(centered_coefficients(simulator_proof.response_zg[0]))
             if response_zb_components:
                 simulator_zb_coeffs.extend(
