@@ -73,8 +73,14 @@ class BudgetArithmeticTests(unittest.TestCase):
         self.assertEqual(paper_budget().binding_component.name, "M-SIS binding")
 
     def test_total_loss_sums_the_losses(self):
+        """Total = classical AFK'22 loss (64) + QROM penalty beyond classical
+        (196) + truncation (0) = 260 at Q=2^64. Previously asserted 256 for
+        the two placeholders (128+128); the computed bound replaced them."""
         budget = paper_budget(quantum_queries=2 ** 64)
-        self.assertAlmostEqual(budget.total_loss, 256.0, places=1)
+        self.assertAlmostEqual(budget.total_loss, 260.0, places=1)
+        self.assertAlmostEqual(
+            budget.total_loss, sum(l.bits for l in budget.losses), places=6
+        )
 
     def test_residual_is_minimum_minus_loss(self):
         budget = paper_budget()
@@ -98,7 +104,10 @@ class HonestyTests(unittest.TestCase):
         self.assertIn("NO CLAIM", verdict)
         # M-LWE is no longer a blocker; the losses and residual still are.
         self.assertNotIn("uncertified component", verdict)
-        self.assertIn("forking", verdict)
+        # The classical FS loss is now ESTABLISHED (AFK'22), so it no longer
+        # appears as a blocker; the QROM penalty does, and so does the
+        # negative residual.
+        self.assertIn("QROM", verdict)
         self.assertIn("non-positive", verdict)
 
     def test_certification_is_a_gate_independent_of_arithmetic(self):

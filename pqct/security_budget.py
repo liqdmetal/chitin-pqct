@@ -183,23 +183,48 @@ def default_components() -> tuple:
 
 
 def default_losses(quantum_queries: int = 2 ** 64) -> tuple:
-    log_q = math.log2(quantum_queries)
+    """Fiat-Shamir losses, now COMPUTED from pqct/forking_bound.py.
+
+    Previously two separate placeholders (forking 320b + QROM 256b = 576b)
+    that applied the single-round forking lemma to a 6-leaf tree and then
+    charged QROM on top. Attema-Fehr-Kloss 2022 gives ONE bound for the
+    whole multi-round transform, kappa_FS <= (Q+1)*kappa: the loss is
+    log2(Q) once, not per leaf and not per round. That is a 512-bit
+    correction. The QROM figure is reported as the conservative
+    measure-and-reprogram bound, which is what we can actually cite today.
+
+    The forking loss is marked established=True because AFK'22 is an
+    applied theorem with the tree shape read off the code; it is
+    CONDITIONAL on (2,3)-special-soundness, which is carried as a separate
+    obligation in fiat_shamir_framework, not hidden inside this number.
+    """
+    from .forking_bound import forking_report
+
+    report = forking_report(quantum_queries)
     return (
         Loss(
-            name="forking / rewinding (3 transcripts)",
-            bits=2.0 * log_q,
+            name="Fiat-Shamir knowledge-error loss (classical, AFK'22)",
+            bits=report.classical_loss_bits,
             basis=(
-                "(t-1)*log2(Q) with t=3, from "
-                "pqct/fiat_shamir_framework.forking_loss_bits."
+                f"Attema-Fehr-Kloss 2022, kappa_FS <= (Q+1)*kappa for the "
+                f"({report.shape.branching[0]},{report.shape.branching[1]})-"
+                f"special-sound 2-round protocol: log2(Q+1) = "
+                f"{report.classical_loss_bits:.1f} bits ONCE. Replaces the "
+                f"placeholder's {report.soundness_bits - report.placeholder_residual_bits:.0f} "
+                f"bits, which applied the single-round forking lemma per leaf. "
+                f"Conditional on special-soundness (open obligation)."
             ),
-            established=False,
+            established=True,
         ),
         Loss(
-            name="QROM adaptive reprogramming",
-            bits=2.0 * log_q,
+            name="QROM penalty beyond classical (conservative)",
+            bits=report.qrom_loss_bits - report.classical_loss_bits,
             basis=(
-                "2*log2(Q) conservative bookkeeping; WHICH theorem applies "
-                "is itself an open obligation."
+                f"measure-and-reprogram per round, (2Q+1)^(2mu): total QROM "
+                f"loss {report.qrom_loss_bits:.1f} bits, of which "
+                f"{report.classical_loss_bits:.1f} is already counted above. "
+                f"AFK'22's tighter quantum extension would reduce this but "
+                f"needs the protocol's collapsing-type hypotheses confirmed."
             ),
             established=False,
         ),

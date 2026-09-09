@@ -64,51 +64,56 @@ class LossTests(unittest.TestCase):
 
 
 class ResidualBudgetTests(unittest.TestCase):
-    """The substantive finding: the optimistic margin vanishes at Q=2^64."""
+    """The substantive finding, twice corrected.
 
-    def test_residual_is_deeply_negative_at_2_to_the_64(self):
-        """CORRECTED. An earlier version asserted ~0 bits here, which was
-        computed for a three-move protocol. The implemented protocol has two
-        Fiat-Shamir challenges (zeta then x), so extraction needs a 6-leaf
-        tree and QROM loss compounds per round: 256 - 320 - 256 = -320."""
+    v1 asserted ~0 bits (computed for a 3-move protocol -- wrong structure).
+    v2 asserted -320 bits (right structure, WRONG THEOREM: it applied the
+       single-round forking lemma once per leaf of a 6-leaf tree).
+    v3 (this) uses Attema-Fehr-Kloss 2022, which bounds the entire
+       multi-round Fiat-Shamir transform by ONE factor (Q+1). The
+       classical loss is log2(Q+1) ~ 64 bits, not 320. The conservative
+       QROM figure is still large and is reported separately.
+    """
+
+    def test_forking_loss_is_log2_q_once(self):
         framework = paper_framework(quantum_queries=2 ** 64)
+        self.assertAlmostEqual(framework.forking_loss, 64.0, delta=0.01)
+
+    def test_total_loss_is_the_conservative_qrom_figure(self):
+        """forking_loss + qrom_loss = full conservative QROM loss (260 at 2^64)."""
+        framework = paper_framework(quantum_queries=2 ** 64)
+        total = framework.forking_loss + framework.qrom_loss
+        self.assertAlmostEqual(total, 260.0, delta=0.5)
+
+    def test_classical_residual_is_comfortable(self):
+        """256 soundness - 64 classical loss = ~190 bits. This is the
+        number the placeholder buried under a 512-bit error."""
+        framework = paper_framework(quantum_queries=2 ** 64)
+        classical_residual = framework.soundness_bits - framework.forking_loss
+        self.assertGreater(classical_residual, 185.0)
+
+    def test_conservative_qrom_residual_is_near_zero_at_2_to_64(self):
+        """The pessimistic quantum bound is where the margin actually
+        vanishes -- and only there. residual_bits_optimistic subtracts the
+        FULL conservative QROM loss."""
+        framework = paper_framework(quantum_queries=2 ** 64)
+        self.assertLess(framework.residual_bits_optimistic, 0.0)
+        self.assertGreater(framework.residual_bits_optimistic, -10.0)
+
+    def test_placeholder_error_was_512_bits(self):
+        """Pin the size of the correction so the wrong formula can't return."""
+        from pqct.forking_bound import forking_report
+        report = forking_report(2 ** 64)
         self.assertAlmostEqual(
-            framework.residual_bits_optimistic, -320.0, delta=1.0
-        )
-        self.assertAlmostEqual(framework.forking_loss, 320.0, delta=1.0)
-        self.assertAlmostEqual(framework.qrom_loss, 256.0, delta=1.0)
-
-    def test_residual_is_negative_even_for_small_query_budgets(self):
-        """The multi-round losses (5+4)*log2(Q) = 9*log2(Q) outrun the 256
-        bits of soundness once log2(Q) > ~28, so there is no comfortable
-        regime under the corrected structure."""
-        self.assertLess(
-            paper_framework(quantum_queries=2 ** 32).residual_bits_optimistic, 0.0
-        )
-        # Only a very small query budget leaves anything at all.
-        self.assertGreater(
-            paper_framework(quantum_queries=2 ** 16).residual_bits_optimistic, 0.0
+            report.classical_fs_bits - report.placeholder_residual_bits,
+            512.0, delta=1.0,
         )
 
-    def test_reducing_to_one_round_recovers_320_bits(self):
-        """What the non-adaptive zeta attempt would buy, if sound."""
-        two_round = paper_framework(quantum_queries=2 ** 64)
-        one_round = FiatShamirFramework(
-            56, 8, 64, 2 ** 64, transcripts_needed=3, challenge_rounds=1
-        )
-        self.assertAlmostEqual(
-            one_round.residual_bits_optimistic
-            - two_round.residual_bits_optimistic,
-            320.0, delta=1.0,
-        )
-
-    def test_needing_fewer_transcripts_recovers_margin(self):
-        """Documents WHERE the margin goes: (t-1)*log2(Q) of forking loss."""
-        three = FiatShamirFramework(56, 8, 64, 2 ** 64, transcripts_needed=3)
-        two = FiatShamirFramework(56, 8, 64, 2 ** 64, transcripts_needed=2)
-        self.assertGreater(
-            two.residual_bits_optimistic, three.residual_bits_optimistic + 60
-        )
+    def test_loss_scales_once_with_log_q(self):
+        """Doubling log2(Q) adds ~log2(Q) to the classical loss, not 5x that."""
+        a = paper_framework(quantum_queries=2 ** 32).forking_loss
+        b = paper_framework(quantum_queries=2 ** 64).forking_loss
+        self.assertAlmostEqual(b - a, 32.0, delta=0.01)
 
 
 class HonestyTests(unittest.TestCase):

@@ -278,13 +278,22 @@ class FiatShamirFramework:
 
     @property
     def forking_loss(self) -> float:
-        return forking_loss_bits(self.quantum_queries, self.transcripts_needed)
+        """COMPUTED via Attema-Fehr-Kloss 2022, not the per-leaf placeholder.
+
+        The old `forking_loss_bits(Q, leaves)` charged (leaves-1)*log2 Q =
+        320 bits. AFK'22 bounds the whole multi-round FS transform by a
+        single factor (Q+1): log2(Q+1) ~ 64 bits. See pqct/forking_bound.
+        """
+        from .forking_bound import forking_report
+        return forking_report(self.quantum_queries).classical_loss_bits
 
     @property
     def qrom_loss(self) -> float:
-        return qrom_reprogramming_loss_bits(
-            self.quantum_queries, self.challenge_rounds
-        )
+        """QROM penalty BEYOND the classical loss (conservative
+        measure-and-reprogram), so forking_loss + qrom_loss = total."""
+        from .forking_bound import forking_report
+        report = forking_report(self.quantum_queries)
+        return report.qrom_loss_bits - report.classical_loss_bits
 
     @property
     def residual_bits_optimistic(self) -> float:
