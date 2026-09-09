@@ -272,10 +272,19 @@ def tail_for_sigma(sigma: Decimal, multiplier: int = 6, minimum: int = 8) -> int
     (slow sampling), and for the large-sigma profile it truncates so hard
     the result is near-uniform and fits nothing (this caused a real false
     REJECT in the goodness-of-fit work). Scaling per profile removes both
-    failure modes. ~6 sigma leaves the omitted two-sided mass far below
-    the paper's 2^-100 target for these toy profiles; this is a support
-    choice for the FINITE reference sampler, not a claim about Gao's exact
-    infinite D_sigma convention.
+    failure modes.
+
+    CORRECTION: an earlier version of this docstring claimed ~6 sigma leaves
+    the omitted mass "far below the paper's 2^-100 target". That was WRONG.
+    The truncation distance is erfc(T/(sigma*sqrt 2)), which depends only on
+    T/sigma, so at 6 sigma it is ~1.97e-9 (about 2^-29) per coordinate --
+    REGARDLESS of sigma. Reaching 2^-100 per coordinate needs ~11.6 sigma,
+    and ~12.25 sigma once composed across a few thousand transcript
+    coefficients. See pqct.truncation_distance and docs/TRUNCATION_DISTANCE.md.
+
+    The 6-sigma default is kept because it is fast and adequate for the toy
+    research fixtures, but it is NOT a 2^-100 support. Use
+    `tail_for_target_distance` when the composed bound matters.
     """
     if sigma <= 0:
         raise SamplingError("sigma must be positive")
@@ -283,6 +292,28 @@ def tail_for_sigma(sigma: Decimal, multiplier: int = 6, minimum: int = 8) -> int
         raise SamplingError("multiplier must be positive and minimum nonnegative")
     scaled = int((sigma * multiplier).to_integral_value(rounding="ROUND_CEILING"))
     return max(minimum, scaled)
+
+
+def tail_for_target_distance(
+    sigma: Decimal, coordinates: int, target_log2: int = -100, minimum: int = 8
+) -> int:
+    """Smallest tail whose COMPOSED truncation distance meets 2^target_log2.
+
+    Composes over `coordinates` independently sampled coefficients (statistical
+    distance is subadditive under products), so the per-coordinate budget is
+    2^target_log2 / coordinates. Delegates the search to
+    pqct.truncation_distance so there is one implementation of the bound.
+    """
+    from .truncation_distance import required_tail_for_target
+
+    if sigma <= 0:
+        raise SamplingError("sigma must be positive")
+    if coordinates <= 0:
+        raise SamplingError("coordinates must be positive")
+    tail = required_tail_for_target(
+        float(sigma), coordinates, target=2.0 ** target_log2
+    )
+    return max(minimum, tail)
 
 
 @dataclass(frozen=True)

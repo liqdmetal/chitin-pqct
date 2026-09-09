@@ -159,6 +159,38 @@ def _is_negated(line: str, match: re.Match) -> bool:
     )
 
 
+def step_security_frameworks(step: Step) -> None:
+    """Fiat-Shamir and bit-security frameworks must stay HONEST.
+
+    This step does not check a security level -- there isn't one. It checks
+    that the frameworks still REFUSE to claim one while obligations are
+    open. A regression here would mean the repo started overstating itself,
+    which is the failure mode that matters most.
+    """
+    from pqct.fiat_shamir_framework import paper_framework
+    from pqct.security_budget import paper_budget
+
+    framework = paper_framework()
+    budget = paper_budget()
+
+    fs_open = len(framework.open_obligations)
+    ok_fs = fs_open > 0 and "OPEN" in framework.overall_status
+    ok_budget = (not budget.claimable) and "NO CLAIM" in budget.verdict
+    # The M-SIS range must still match the hardness module.
+    ok_msis = 85.0 <= budget.minimum_low <= 120.0
+
+    step.ok = ok_fs and ok_budget and ok_msis
+    step.detail = (
+        f"FS: {fs_open}/{len(framework.open_obligations) + len(framework.discharged_obligations)}"
+        f" open, soundness {framework.soundness_bits:.0f}b - forking "
+        f"{framework.forking_loss:.0f}b - qrom {framework.qrom_loss:.0f}b "
+        f"= {framework.residual_bits_optimistic:.0f}b; "
+        f"budget capped by {budget.binding_component.name} "
+        f"({budget.minimum_low:.0f}-{budget.minimum_high:.0f}b), "
+        f"claimable={budget.claimable}"
+    )
+
+
 def audit_text(text: str) -> list[tuple[int, str]]:
     """Return [(line_no, why)] for forbidden claims in `text`.
 
@@ -217,6 +249,7 @@ def main() -> int:
         (Step("paper number reproduction"), step_paper_reproduction),
         (Step("M-SIS Eq.(2) criterion"), step_msis_criterion),
         (Step("experimental testnet"), step_testnet),
+        (Step("security frameworks stay honest"), step_security_frameworks),
         (Step("claim audit"), step_claim_audit),
     ]
 
@@ -239,7 +272,7 @@ def main() -> int:
         print(f"STACK CHECK FAILED -- {len(failures)} step(s): "
               + ", ".join(s.name for s in failures))
         return 1
-    print("STACK CHECK PASSED -- all 6 steps green")
+    print(f"STACK CHECK PASSED -- all {len(steps)} steps green")
     print("Standing caveat: plumbing is tested; the underlying proofs are")
     print("UNPROVEN research crypto. No bit-security level is certified.")
     print("=" * 74)

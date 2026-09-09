@@ -189,6 +189,16 @@ from .simulator_rejection import SimulatorRejectionError, measure_simulator_rate
 from .simulator_rejection import simulate_rejection, simulator_acceptance_probability
 from .msis_hardness import HardnessError, MSISHardnessReport, analyze_msis
 from .msis_hardness import blocksize_for_root_hermite, root_hermite_from_blocksize
+from .truncation_distance import DistanceError, ProfileDistance, TranscriptDistance
+from .truncation_distance import closed_form_bound, exact_statistical_distance
+from .truncation_distance import required_tail_for_target, transcript_distance
+from .protocol5_integer_trace import Observation, Protocol5TraceError
+from .protocol5_integer_trace import Protocol5TraceReport, trace_cycle_mask
+from .protocol5_integer_trace import trace_protocol5
+from .fiat_shamir_framework import FiatShamirFramework, FrameworkError, Obligation
+from .fiat_shamir_framework import Status, challenge_space_size, paper_framework
+from .security_budget import BudgetError, Certification, Component, Loss
+from .security_budget import SecurityBudget, paper_budget
 from .three_transcript_extraction import RelaxedWitness, ThreeTranscriptError
 from .three_transcript_extraction import ThreeTranscriptExtraction
 from .three_transcript_extraction import extract_all_rows

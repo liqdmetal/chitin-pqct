@@ -1,0 +1,149 @@
+"""Tests for the end-to-end security budget.
+
+Pins both the arithmetic (minimum over components, minus losses) and the
+honesty properties: an unanalysed component must block a claim, and the
+budget must never present a residual as a security level while anything is
+open.
+"""
+
+import math
+import unittest
+
+from pqct.security_budget import (
+    BudgetError,
+    Certification,
+    Component,
+    Loss,
+    SecurityBudget,
+    default_components,
+    default_losses,
+    mlwe_component,
+    msis_component,
+    paper_budget,
+    signature_component,
+)
+
+
+class ComponentTests(unittest.TestCase):
+    def test_rejects_inverted_range(self):
+        with self.assertRaises(BudgetError):
+            Component("bad", 100.0, 50.0, Certification.COMPUTED_EXACT, "x")
+
+    def test_unanalysed_is_not_certified(self):
+        self.assertFalse(mlwe_component().certified)
+        self.assertTrue(msis_component().certified)
+        self.assertTrue(signature_component().certified)
+
+    def test_mlwe_gap_is_explicit_about_confidentiality(self):
+        basis = mlwe_component().basis
+        self.assertIn("NOT ANALYSED", basis)
+        self.assertIn("hiding", basis.lower())
+
+    def test_msis_range_matches_the_hardness_module(self):
+        component = msis_component()
+        self.assertAlmostEqual(component.bits_low, 91.5, places=1)
+        self.assertAlmostEqual(component.bits_high, 117.3, places=1)
+        self.assertTrue(component.is_range)
+
+    def test_signature_is_flagged_as_external_not_ours(self):
+        component = signature_component()
+        self.assertEqual(component.certification, Certification.EXTERNAL_STANDARD)
+        self.assertIn("FIPS 204", component.basis)
+
+
+class BudgetArithmeticTests(unittest.TestCase):
+    def test_minimum_ignores_uncertified_components(self):
+        """The unanalysed M-LWE term is 0 bits but must not drag the
+        minimum to 0 -- it blocks the CLAIM instead, which is the honest
+        treatment of 'unknown' versus 'known to be weak'."""
+        budget = paper_budget()
+        self.assertGreater(budget.minimum_low, 0.0)
+        self.assertAlmostEqual(budget.minimum_low, 91.5, places=1)
+
+    def test_capped_by_the_weakest_certified_component(self):
+        self.assertEqual(paper_budget().binding_component.name, "M-SIS binding")
+
+    def test_total_loss_sums_the_losses(self):
+        budget = paper_budget(quantum_queries=2 ** 64)
+        self.assertAlmostEqual(budget.total_loss, 256.0, places=1)
+
+    def test_residual_is_minimum_minus_loss(self):
+        budget = paper_budget()
+        self.assertAlmostEqual(
+            budget.residual_low, budget.minimum_low - budget.total_loss, places=6
+        )
+
+    def test_losses_scale_with_query_budget(self):
+        small = paper_budget(quantum_queries=2 ** 32)
+        large = paper_budget(quantum_queries=2 ** 80)
+        self.assertLess(small.total_loss, large.total_loss)
+        self.assertGreater(small.residual_low, large.residual_low)
+
+
+class HonestyTests(unittest.TestCase):
+    def test_not_claimable_with_an_unanalysed_component(self):
+        self.assertFalse(paper_budget().claimable)
+
+    def test_verdict_names_every_blocker(self):
+        verdict = paper_budget().verdict
+        self.assertIn("NO CLAIM", verdict)
+        self.assertIn("M-LWE hiding", verdict)
+        self.assertIn("forking", verdict)
+        self.assertIn("non-positive", verdict)
+
+    def test_still_not_claimable_even_if_residual_were_positive(self):
+        """Certification is a separate gate from arithmetic: a comfortable
+        residual must NOT unlock a claim while a component is unanalysed."""
+        budget = SecurityBudget(
+            components=default_components(),
+            losses=(Loss("none", 0.0, "no loss", True),),
+        )
+        self.assertGreater(budget.residual_low, 0.0)
+        self.assertFalse(budget.claimable, "unanalysed M-LWE must still block")
+        self.assertIn("M-LWE", budget.verdict)
+
+    def test_becomes_claimable_only_when_everything_is_closed(self):
+        """Documents the exact conditions: all certified, all losses
+        established, residual positive."""
+        components = (
+            msis_component(),
+            Component("M-LWE hiding", 120.0, 120.0,
+                      Certification.TWO_METHODS_AGREE, "hypothetical"),
+            signature_component(),
+        )
+        budget = SecurityBudget(
+            components=components,
+            losses=(Loss("small", 10.0, "hypothetical", True),),
+        )
+        self.assertTrue(budget.claimable)
+        self.assertIn("external review", budget.verdict)
+
+    def test_unestablished_loss_alone_blocks_a_claim(self):
+        components = (
+            msis_component(),
+            Component("M-LWE hiding", 120.0, 120.0,
+                      Certification.TWO_METHODS_AGREE, "hypothetical"),
+        )
+        budget = SecurityBudget(
+            components=components,
+            losses=(Loss("guess", 5.0, "not established", False),),
+        )
+        self.assertFalse(budget.claimable)
+        self.assertIn("unestablished", budget.verdict)
+
+    def test_summary_reports_no_claim(self):
+        summary = paper_budget().summary()
+        self.assertFalse(summary["claimable"])
+        self.assertIn("NO CLAIM", summary["verdict"])
+        self.assertEqual(summary["capped_by"], "M-SIS binding")
+
+    def test_truncation_loss_is_established(self):
+        """The one loss this repo actually closed."""
+        truncation = next(
+            l for l in default_losses() if "truncation" in l.name
+        )
+        self.assertTrue(truncation.established)
+
+
+if __name__ == "__main__":
+    unittest.main()
