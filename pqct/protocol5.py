@@ -27,6 +27,7 @@ from .protocol1_sampling import (
     coefficient_vector,
     sample_box_ring_vector,
     sample_gaussian_ring_vector,
+    tail_for_sigma,
 )
 from .relations import decompose_unsigned
 from .ring_challenge import (
@@ -43,9 +44,8 @@ class Protocol5Error(ValueError):
 
 
 def _tail_for_sigma(sigma: Decimal, minimum: int = 8) -> int:
-    """Per-profile support tail ~6*sigma (kills the shared-tail footgun)."""
-    scaled = int((sigma * 6).to_integral_value(rounding="ROUND_CEILING"))
-    return max(minimum, scaled)
+    """Per-profile support tail; delegates to the shared helper (one source)."""
+    return tail_for_sigma(sigma, multiplier=6, minimum=minimum)
 
 
 def _constant_poly(value: int, params) -> RingElement:

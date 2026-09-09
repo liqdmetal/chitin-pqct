@@ -264,6 +264,27 @@ def _ringwise_mul(challenge: Sequence[int], flat_values: Sequence[int], n: int) 
     )
 
 
+def tail_for_sigma(sigma: Decimal, multiplier: int = 6, minimum: int = 8) -> int:
+    """Support tail scaled to the distribution's OWN sigma.
+
+    A single fixed tail shared by profiles with very different sigmas is a
+    footgun: for the small-sigma profile the support is wastefully wide
+    (slow sampling), and for the large-sigma profile it truncates so hard
+    the result is near-uniform and fits nothing (this caused a real false
+    REJECT in the goodness-of-fit work). Scaling per profile removes both
+    failure modes. ~6 sigma leaves the omitted two-sided mass far below
+    the paper's 2^-100 target for these toy profiles; this is a support
+    choice for the FINITE reference sampler, not a claim about Gao's exact
+    infinite D_sigma convention.
+    """
+    if sigma <= 0:
+        raise SamplingError("sigma must be positive")
+    if multiplier <= 0 or minimum < 0:
+        raise SamplingError("multiplier must be positive and minimum nonnegative")
+    scaled = int((sigma * multiplier).to_integral_value(rounding="ROUND_CEILING"))
+    return max(minimum, scaled)
+
+
 @dataclass(frozen=True)
 class Protocol1DistributionParameters:
     """Protocol 1 distribution knobs with the paper's T1/T2 formulas."""
@@ -272,6 +293,7 @@ class Protocol1DistributionParameters:
     gaussian_tail: int = 12
     phi1: Decimal = Decimal("1")
     phi2: Decimal = Decimal("2")
+    auto_tail: bool = False
 
     def __post_init__(self) -> None:
         if self.B <= 0 or self.gaussian_tail < 0:
@@ -296,9 +318,15 @@ class Protocol1DistributionParameters:
     ) -> tuple[FiniteDiscreteGaussian, FiniteDiscreteGaussian, Decimal, Decimal]:
         t1 = self.t1(p, w, k)
         t2 = self.t2(self.B, w, p, m, d)
+        if self.auto_tail:
+            t_tail = tail_for_sigma(self.phi1 * t1)
+            opening_tail = tail_for_sigma(self.phi2 * t2)
+        else:
+            t_tail = self.gaussian_tail
+            opening_tail = self.gaussian_tail
         return (
-            FiniteDiscreteGaussian(self.phi1 * t1, self.gaussian_tail),
-            FiniteDiscreteGaussian(self.phi2 * t2, self.gaussian_tail),
+            FiniteDiscreteGaussian(self.phi1 * t1, t_tail),
+            FiniteDiscreteGaussian(self.phi2 * t2, opening_tail),
             t1,
             t2,
         )
@@ -448,4 +476,5 @@ __all__ = [
     "sample_gaussian",
     "sample_protocol1_masks",
     "squared_l2",
+    "tail_for_sigma",
 ]

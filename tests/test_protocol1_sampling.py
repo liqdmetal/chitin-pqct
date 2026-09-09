@@ -87,6 +87,33 @@ class Protocol1SamplingTests(unittest.TestCase):
         with self.assertRaises(SamplingError):
             RejectionPolicy(Decimal("0"), Decimal("1"), Decimal("1"))
 
+    def test_tail_for_sigma_scales_with_sigma(self):
+        from pqct.protocol1_sampling import tail_for_sigma
+        small = tail_for_sigma(Decimal("2"))
+        large = tail_for_sigma(Decimal("20"))
+        self.assertGreaterEqual(small, 8)
+        self.assertEqual(large, 120)
+        with self.assertRaises(SamplingError):
+            tail_for_sigma(Decimal(0))
+
+    def test_auto_tail_gives_per_profile_support(self):
+        from pqct.protocol1_sampling import Protocol1DistributionParameters
+        manual = Protocol1DistributionParameters(
+            B=1, gaussian_tail=12, phi1=Decimal("1"), phi2=Decimal("4"),
+        )
+        auto = Protocol1DistributionParameters(
+            B=1, gaussian_tail=12, phi1=Decimal("1"), phi2=Decimal("4"),
+            auto_tail=True,
+        )
+        m_t, m_open, _, _ = manual.profiles(2, 2, 3, 1, 8)
+        a_t, a_open, _, _ = auto.profiles(2, 2, 3, 1, 8)
+        # Manual: both profiles share tail 12 regardless of sigma.
+        self.assertEqual(m_t.tail, 12)
+        self.assertEqual(m_open.tail, 12)
+        # Auto: opening profile (phi2*t2 larger sigma) gets a wider tail.
+        self.assertGreater(a_open.tail, a_t.tail)
+        self.assertGreater(a_open.sigma, a_t.sigma)
+
 
 if __name__ == "__main__":
     unittest.main()
