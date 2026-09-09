@@ -1,47 +1,66 @@
-# Internal Audit Findings — Independent Eyes
+# Internal Audit Findings — Current State
 
-**Decision:** NO-GO for production; GO for synthetic research only.
+**Decision:** NO-GO for production; GO for isolated synthetic research only.
+**Supersedes:** the original 9-finding snapshot in this file. Historical
+findings remain useful as provenance but must not be read as current status.
 
-## Closed or narrowed
+## Current verified evidence
 
-### F-001 — Protocol equation mismatch
+- Ring-valued Protocol 1 path, canonical encoding, challenge ordering, sampled
+  rejection harness, extraction laboratories, authorization/provenance layer,
+  and synthetic value-node tests exist.
+- AFK'22 classical and DFM'20 QROM accounting is wired into the executable
+  framework; the DFM bound is treated as tight for the generic theorem.
+- Three-transcript special-soundness experiments, relaxation accounting,
+  quantum-rewinding scope checks, and a computed SHVZK bound exist.
+- The sampler ships the 13-sigma tail and the budget reads that live setting.
+- Current stack gate: 649 tests passed, all 7 stack steps green at the last
+  verified run.
 
-The old scalar/batched helper was not Gao Protocol 1. A separate ring-valued path now exists. It derives the pre-commitment aggregation challenge `zeta`, uses ring powers `zeta^i`, then derives the response challenge `x` after `E/F/G`.
+## Current blockers — still binding
 
-### F-002 — Missing rejection path
+### F-001 — Research parameters are not deployment parameters
 
-A finite-support reference sampler, exact paper-shaped rejection exponent, two-stage abort/retry wrapper, and self-verification path now exist. This closes the **laboratory wiring** gap only; it does not establish the paper's infinite discrete-Gaussian statistical-distance theorem.
+Toy ring dimensions and estimator outputs do not establish a concrete
+Module-SIS/Module-LWE security level. No 128-bit PQ or production claim is
+permitted.
 
-### F-003 — Aggregate/index confusion
+### F-002 — Paper-faithful distribution theorem remains external
 
-The implementation now keeps `z_{b,i}` per index internally and emits the single Protocol 1 aggregate `z_b = sum_i zeta^i z_{b,i}`. The verifier checks that aggregate against the weighted public commitment.
+The finite-support Gaussian and rejection implementation has a computed bound
+and diagnostics, but Gao's exact distribution convention, smoothing conditions,
+and Lemma 6 constant have not been independently re-derived.
 
-### F-004 — Incorrect coefficientwise challenge multiplication
+### F-003 — Security reductions remain conditional
 
-The rejection harness now multiplies each ring block negacyclicly by `x`; it no longer treats a ring challenge as a coordinatewise integer vector.
+The extractor and verifier equations are executable and adversarially tested,
+but a complete independently reviewed knowledge-soundness reduction for the
+full ring implementation and all `S <= 2` composition is not established.
 
-## Open critical findings
+### F-004 — Concrete mixed-bound lattice estimates remain model-dependent
 
-### F-005 — Finite reference distributions are not exact paper distributions
+M-SIS/M-LWE numbers are estimator/model reports. Mixed bounds, ring embeddings,
+hybrid attacks, multi-instance effects, and implementation assumptions require
+expert review.
 
-`FiniteDiscreteGaussian` is a variable-time, finite-support inverse-CDF oracle. It reports an omitted-tail diagnostic but does not prove the exact `D_sigma` convention, smoothing condition, or `2^-100` statistical-distance target in Gao's Lemma 6.
+### F-005 — No independent second implementation
 
-### F-006 — No soundness reduction
+There is no independent Rust/C/Sage end-to-end implementation agreeing on full
+transcripts and wire vectors.
 
-The `(S,3)` relaxed-opening extractor, non-invertible challenge-difference handling, relaxed norm bounds, and `S <= 2` reduction have not been independently reproduced.
+### F-006 — Systems security is absent
 
-### F-007 — No SHVZK simulator
+No constant-time, side-channel, memory-safety, parser-fuzzing, wallet-recovery,
+production key lifecycle, or deployment audit exists.
 
-The code has honest algebraic transcripts only. It has no independently implemented simulator or transcript-distance experiment.
+### F-007 — No external cryptanalysis or university review
 
-### F-008 — No concrete lattice estimate
-
-Toy dimensions and moduli are not Module-SIS/Module-LWE security parameters. No 128-bit claim is permitted.
-
-### F-009 — No transaction composition
-
-Balance/range proofs, integer conservation, authorization, state/replay binding, and balance-recovery encryption remain separate work.
+Internal tests and delegated review do not substitute for independent
+cryptanalysis.
 
 ## Verdict
 
-The lab now supports reproducible, self-verified synthetic Protocol 1-shaped experiments. It is not a secure proof system, wallet, ledger, consensus component, or production cryptographic implementation.
+The repository is a reproducible research artifact. It is not a secure proof
+system, wallet, ledger, consensus component, or production cryptographic
+implementation. Keep `NO CLAIM` until the blockers above are resolved by
+independent work and external review.
