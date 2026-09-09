@@ -42,10 +42,19 @@ separate errors on my side produced it:
 2. **Wrong phi.** I guessed `phi_1 = phi_2 = 11`. The paper states its
    evaluation setting explicitly (line ~1600): `phi_1 = phi_2 = 15`.
 3. **Wrong norm.** I passed `norm=2` with a `sqrt(cols)` L2 inflation
-   (~62.5x). The estimator's own docstring shows the canonical usage is
-   `norm=+Infinity` with the L_inf bound passed directly (cf. its built-in
-   `Dilithium3_MSIS_WkUnf` example). The inflation was both unnecessary and
-   wrong.
+   (~62.5x). Since `gamma_bin` is an L_inf (coefficientwise) bound, the
+   natural reading is `norm=oo` with the bound passed directly and no
+   inflation. The inflation was unnecessary and wrong.
+
+   *Correction to a claim I made while fixing this:* I cited the estimator's
+   built-in `Dilithium3_MSIS_WkUnf` constant as evidence for the `norm=oo`
+   convention. That citation was never verified — enumerating `SIS` for
+   `Dilithium*` attributes returned an EMPTY list in this install, so no such
+   constant was available to cite. The `norm=oo` reasoning stands on the norm
+   semantics alone (an L_inf bound is an L_inf bound), not on a docstring
+   example. `SIS.Parameters` signature is
+   `(n: int, q: int, length_bound: float, m: int = None, norm: int = 2, tag: str = None)`,
+   i.e. **`norm` defaults to 2** and must be passed explicitly.
 
 With all three corrected, `gamma_bin = 1.43e14 < q = 5.63e14`, so the instance
 is well-posed and the paper's Eq.(2) argument goes through as published.

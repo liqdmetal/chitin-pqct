@@ -1,0 +1,24 @@
+=== inputs (paper Section-8 profile, module->integer embedding) ===
+  gamma_bin (Eq.21 reduced)  = 1.431791e+14
+  q                          = 562949953159681 = 5.629500e+14
+  gamma_bin < q              = True
+  n_int = n*d                = 29*64 = 1856
+  m_int = (m+v)*d            = (60+64)*64 = 7936
+  conservative L2 = gb*sqrt(m_int) = 1.275500e+16   < q ? False
+
+=== direct-gb-as-L2: n=1856, m=7936, norm=2, length_bound=1.431791e+14
+    ADPS16  -> rop=2.22576451409267e32  log2=107.45599999999999  bkz=None  d=3867
+    BDGL16  -> rop=5.95436292742727e41  log2=138.7729990490828  bkz=None  d=3867
+    MATZOV  -> rop=7.51502261200986e40  log2=135.78690124057897  bkz=None  d=3867
+
+=== conservative-L2: n=1856, m=7936, norm=2, length_bound=1.275500e+16
+    SKIP: bound >= q -> estimator reports 'trivially easy'.
+    (an overstated norm bound makes the problem easier, so this
+     reading yields NO information, not a security number)
+
+=== inf-norm: n=1856, m=7936, norm=+Infinity, length_bound=1.431791e+14
+    ADPS16  -> rop=9.20058581543035e24  log2=82.928  bkz=None  d=4008
+    BDGL16  -> rop=9.56872352889778e33  log2=112.88195361280138  bkz=None  d=3378
+    MATZOV  -> rop=5.29644112213097e33  log2=112.02865041547643  bkz=None  d=3448
+
+DONE
