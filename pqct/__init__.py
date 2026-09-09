@@ -49,6 +49,9 @@ from .protocol5 import derive_ring_cycle_mask
 from .protocol5 import prove_linear_equation
 from .protocol5 import ring_cycle_mask_weighted_sum_is_zero
 from .protocol5 import verify_linear_equation
+from .transaction_proof import TransactionProof
+from .transaction_proof import TransactionProofError
+from .transaction_proof import prove_transaction
 from .binary_protocol1 import Protocol1Error, Protocol1Parameters, Protocol1Proof, derive_protocol1_challenge, prove_protocol1, verify_protocol1
 from .binary_protocol1_ring import (RingProtocol1Error, RingProtocol1Parameters, RingProtocol1Proof, build_protocol1_ring_transcript, prove_protocol1_ring, verify_protocol1_ring)
 from .binary_hmc import (

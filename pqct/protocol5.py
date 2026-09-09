@@ -321,6 +321,7 @@ def prove_linear_equation(
     phi2: Decimal,
     phi3: Decimal,
     max_attempts: int = 256,
+    openings_override: Sequence[Sequence[RingElement]] | None = None,
 ) -> Protocol5Result:
     """Gao Protocol 2 prover for signed-amount conservation.
 
@@ -359,6 +360,19 @@ def prove_linear_equation(
     f_profile = FiniteDiscreteGaussian(phi3 * t3, _tail_for_sigma(phi3 * t3))
     z_profile = FiniteDiscreteGaussian(phi2 * t2_prime, _tail_for_sigma(phi2 * t2_prime))
 
+    fixed_openings = None
+    if openings_override is not None:
+        # Validated OUTSIDE the retry loop so malformed input raises
+        # instead of being swallowed into "no accepted transcript".
+        fixed_openings = tuple(tuple(row) for row in openings_override)
+        if len(fixed_openings) != len(signed):
+            raise Protocol5Error("openings_override count differs from amounts")
+        for row in fixed_openings:
+            if len(row) != p5.m:
+                raise Protocol5Error("override opening width differs from m")
+            if any(value.params != params for value in row):
+                raise Protocol5Error("override opening parameter mismatch")
+
     for attempt in range(1, max_attempts + 1):
         attempt_seed = seed + b"|attempt|" + attempt.to_bytes(8, "big")
         try:
@@ -370,10 +384,13 @@ def prove_linear_equation(
                 bits = tuple(
                     _constant_poly(bit, params) for bit in bits_int
                 )
-                opening = sample_box_ring_vector(
-                    XofByteSource(attempt_seed + b"|rb|" + index.to_bytes(4, "big")),
-                    params, p5.m, p5.B,
-                )
+                if fixed_openings is not None:
+                    opening = fixed_openings[index]
+                else:
+                    opening = sample_box_ring_vector(
+                        XofByteSource(attempt_seed + b"|rb|" + index.to_bytes(4, "big")),
+                        params, p5.m, p5.B,
+                    )
                 bits_rows.append(bits)
                 openings.append(opening)
                 commitments.append(key.commit(bits, opening))

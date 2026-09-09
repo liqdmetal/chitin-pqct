@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 191 tests pass.
+- 196 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -74,6 +74,13 @@
   docs/PROTOCOL5.md. Also fixed a real perf trap: FiniteDiscreteGaussian
   weights are now cached (tail~940 was recomputing ~240k Decimal exp()
   per sample, timing out 512-attempt runs).
+- `pqct.transaction_proof` composes Protocol 1 (binary) + Protocol 5
+  (conservation) over ONE shared commitment set, with the shared-
+  commitment identity checked explicitly. Two rejection layers: prover-
+  side fail-fast integer check (efficiency) + verifier-side f_0 range
+  gate (soundness, witness-free). CLI demo
+  `tools/demo_transaction_proof.py` runs honest/non-conserved/mod-q-cheat
+  scenarios. See docs/TRANSACTION_PROOF.md.
 
 ## Still open
 
@@ -95,13 +102,12 @@
 - Balance/range/conservation composition: integer oracle done
   (`balance_composition`); commitment-level composition done
   (`balance_transcript`, real Protocol 1 proofs + eq.(11) check).
-  Remaining: the ZK conservation proof itself (Gao Protocol 5
-  inner-product argument with cycle masking over ring elements) --
-  ring-level machinery now exists in `linear_equation_transcript`;
-  end-to-end prover/verifier now exists in `protocol5` (conservation
-  given committed bits). Remaining: composing Protocol 1 binary proofs
-  with Protocol 5 into one full run, and the third rejection stage's
-  exact D_3 convention (finite-support reference only).
+  The ZK conservation proof (Gao Protocol 5, cycle masking over ring
+  elements) is implemented end-to-end in `protocol5`, and Protocol 1 +
+  Protocol 5 are composed over shared commitments in
+  `transaction_proof`. Remaining: the third rejection stage's exact
+  D_3 convention (finite-support reference only), and certified
+  verifier norm bounds (currently research placeholders).
 - External cryptanalysis.
 - `Protocol1DistributionParameters` shares one `gaussian_tail` for both
   `t_profile` (small sigma) and `opening_profile` (larger sigma); tests
