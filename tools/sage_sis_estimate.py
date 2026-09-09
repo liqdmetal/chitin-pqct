@@ -35,10 +35,11 @@ from decimal import Decimal
 
 from estimator import SIS
 from estimator.reduction import ADPS16, BDGL16, MATZOV
+from sage.all import ZZ, oo
 
 # gamma_bin comes from the pure-stdlib module (no Sage needed there).
 sys.path.insert(0, "/mnt/c/Users/officeone/pq-ct-research")
-from pqct.paper_bounds import gamma_bin
+from pqct.paper_bounds import gamma_bin_reduced
 
 # Gao et al. 2021/1674 reported evaluation profile.
 PAPER_Q = 2**49 - 2**18 + 2**9 + 1
@@ -51,22 +52,37 @@ PAPER_P = 8           # challenge coefficient bound
 PAPER_K = 64          # amount bit width
 
 COST_MODELS = (
-    ("classical_ADPS16", ADPS16),
-    ("classical_BDGL16", BDGL16),
-    ("quantum_MATZOV", MATZOV),
+    # INSTANCES, not classes: SIS.estimate calls model.short_vectors(beta, d)
+    # and passing the class shifts self/beta, producing a misleading
+    # "short_vectors() missing 1 required positional argument: 'd'" error.
+    ("classical_ADPS16", ADPS16()),
+    ("classical_BDGL16", BDGL16()),
+    ("quantum_MATZOV", MATZOV()),
 )
 
 
-def estimate_sis(*, rows: int, cols: int, q: int, l2_bound: float) -> dict:
+def estimate_sis(*, rows: int, cols: int, q: int, inf_bound: float) -> dict:
     """Run estimator.SIS for each cost model; report best attack + rop.
 
-    The verified estimator REJECTS a norm bound >= q as "SIS trivially easy"
-    (a solution can then be read off directly). That rejection is reported
-    here as an explicit ill-posed verdict instead of an exception, because
-    it is a substantive finding about the parameter set, not a tool error.
+    The bound is an INFINITY-norm (coefficientwise) bound and is passed
+    straight through with norm=oo -- the estimator's documented convention
+    (see its Dilithium3_MSIS_WkUnf example). An earlier version wrongly
+    inflated it by sqrt(cols) into an L2 bound; that inflation was both
+    unnecessary and the reason the instance looked ill-posed.
+
+    The verified estimator REJECTS a norm bound >= q as "SIS trivially easy".
+    That is reported as an explicit ill-posed verdict rather than raised,
+    because it is a substantive statement about the parameter set.
+
+    NOTE: in the current sandbox this function cannot complete -- the conda
+    Sage build fails inside mpmath with "Cannot convert mpz to
+    sage.rings.integer.Integer" for every cost model (a gmpy2/mpfr ABI issue,
+    not an input error). The call construction below is the corrected one,
+    verified against the tool's own signatures; it will produce numbers once
+    run in a working Sage environment.
     """
     out = {}
-    if l2_bound >= q:
+    if inf_bound >= q:
         return {
             "ill_posed": True,
             "reason": (
@@ -74,10 +90,13 @@ def estimate_sis(*, rows: int, cols: int, q: int, l2_bound: float) -> dict:
                 "('SIS trivially easy. Please set norm bound < q.'). Any "
                 "bit-security number produced from it is meaningless."
             ),
-            "l2_bound": l2_bound,
+            "inf_bound": inf_bound,
             "q": q,
         }
-    params = SIS.Parameters(n=rows, q=q, length_bound=l2_bound, m=cols, norm=2)
+    params = SIS.Parameters(
+        n=ZZ(rows), q=ZZ(q), length_bound=ZZ(int(inf_bound)),
+        m=ZZ(cols), norm=oo,
+    )
     for name, model in COST_MODELS:
         try:
             est = SIS.estimate(
@@ -101,20 +120,21 @@ def estimate_sis(*, rows: int, cols: int, q: int, l2_bound: float) -> dict:
 
 
 def max_phi1_for_feasible_bound(*, q: int, p: int, d: int, w: int, k: int,
-                                phi2: Decimal, B: int, m: int) -> Decimal:
+                                S: int, phi2: Decimal, B: int, m: int) -> Decimal:
     """Largest phi_1 keeping gamma_bin < q (Gao Eq.(2) needs min{q,...} > beta).
 
-    gamma_bin = 4 p^2 sqrt(d^3 w^3 (32 d p^2 k^3 phi_1^4 + 3 phi_2^2 B^2 m^2))
-    is monotone increasing in phi_1, so bisect for the crossover.
+    Uses the REDUCED Section-8 bound gamma_bin_reduced (Eq.21), which is what
+    the paper's own evaluation uses; the unreduced Theorem 1 bound is ~16x
+    larger and crosses q far earlier. Monotone increasing in phi_1, so bisect.
     """
     lo, hi = Decimal("0.01"), Decimal("10000")
-    if gamma_bin(p, d, w, k, lo, phi2, B, m) >= q:
+    if gamma_bin_reduced(p, d, w, k, S, lo, phi2, B, m) >= q:
         return Decimal(0)
-    if gamma_bin(p, d, w, k, hi, phi2, B, m) < q:
+    if gamma_bin_reduced(p, d, w, k, S, hi, phi2, B, m) < q:
         return hi
     for _ in range(200):
         mid = (lo + hi) / 2
-        if gamma_bin(p, d, w, k, mid, phi2, B, m) < q:
+        if gamma_bin_reduced(p, d, w, k, S, mid, phi2, B, m) < q:
             lo = mid
         else:
             hi = mid
@@ -124,22 +144,22 @@ def max_phi1_for_feasible_bound(*, q: int, p: int, d: int, w: int, k: int,
 def main() -> None:
     rows = PAPER_N_MODULE * PAPER_D
     cols = (PAPER_M + PAPER_V) * PAPER_D
+    S = 2
 
-    # Protocol 1 binary-proof dimensions (paper profile).
+    # Protocol 1 binary-proof dimensions. phi_1 = phi_2 = 15 is the paper's
+    # OWN evaluation setting (Section 7, "under settings: phi1 = phi2 = 15").
     p, w, k = PAPER_P, PAPER_W, PAPER_K
-    phi2 = Decimal("11")
+    phi2 = Decimal("15")
     B, m = 1, PAPER_M
+    phi1 = Decimal(sys.argv[1]) if len(sys.argv) > 1 else Decimal("15")
+    gb = gamma_bin_reduced(p, PAPER_D, w, k, S, phi1, phi2, B, m)
 
-    # phi_1 = 11 is the value used in our parameter_validation example.
-    phi1 = Decimal(sys.argv[1]) if len(sys.argv) > 1 else Decimal("11")
-    gb = gamma_bin(p, PAPER_D, w, k, phi1, phi2, B, m)
-
-    # Conservative inf-norm -> L2 conversion: assume every one of the `cols`
-    # integer coefficients saturates the inf-norm bound.
-    l2_bound = math.sqrt(cols) * float(gb)
+    # gamma_bin is an infinity-norm (coefficientwise) bound; pass it straight
+    # through with norm=oo. No sqrt(cols) L2 inflation (that was wrong).
+    inf_bound = float(gb)
 
     feasible_phi1 = max_phi1_for_feasible_bound(
-        q=PAPER_Q, p=p, d=PAPER_D, w=w, k=k, phi2=phi2, B=B, m=m,
+        q=PAPER_Q, p=p, d=PAPER_D, w=w, k=k, S=S, phi2=phi2, B=B, m=m,
     )
 
     result = {
@@ -158,13 +178,15 @@ def main() -> None:
             "integer_cols": cols,
             "phi1": str(phi1),
             "phi2": str(phi2),
-            "gamma_bin_inf_bound": str(gb),
-            "l2_bound_conservative": l2_bound,
+            "S": S,
+            "gamma_bin_reduced_inf_bound": str(gb),
+            "norm_used": "infinity (norm=oo), bound passed through unmodified",
         },
         "feasibility": {
-            "gamma_bin_lt_q": float(gb) < PAPER_Q,
-            "l2_bound_lt_q": l2_bound < PAPER_Q,
+            "gamma_bin_lt_q": inf_bound < PAPER_Q,
             "max_phi1_with_gamma_bin_lt_q": str(feasible_phi1),
+            "paper_prints_2_gamma_bin": "~2.86e14",
+            "ours_2_gamma_bin": f"{2 * inf_bound:.4e}",
             "note": (
                 "Gao Eq.(2) requires min{q, 2^...} > beta; a bound >= q makes "
                 "the SIS instance trivially easy, so the relation bound must "
@@ -172,7 +194,7 @@ def main() -> None:
             ),
         },
         "estimates_at_requested_phi1": estimate_sis(
-            rows=rows, cols=cols, q=PAPER_Q, l2_bound=l2_bound,
+            rows=rows, cols=cols, q=PAPER_Q, inf_bound=inf_bound,
         ),
     }
     print(json.dumps(result, indent=2))

@@ -1,9 +1,8 @@
 # Verified lattice estimate (blocker item 5) — status and findings
 
-The real `malb/lattice-estimator` (Albrecht/Player/Scott) is now installed
-and runnable, inside a sandboxed WSL user. This closes the *tooling* half of
-blocker item 5. It does NOT yet produce a certified security number, for a
-substantive reason recorded below.
+The real `malb/lattice-estimator` (Albrecht/Player/Scott) is installed and
+runs in a sandboxed WSL user. Blocker item 5 is still OPEN, but for a
+different reason than this document previously claimed — see the correction.
 
 ## Sandbox (how to run it)
 
@@ -23,70 +22,102 @@ pqct -> sudo                DENIED
 root / ryan1 / hermes       UNAFFECTED (rules are meta skuid != 1001 accept)
 ```
 
-Toolchain: miniforge3 -> conda env `sage` -> `sage` 10.7 (conda-forge;
-note `sagemath-standard` does NOT exist on conda-forge, the package is just
-`sage`) -> `pip install git+https://github.com/malb/lattice-estimator`.
-Cost models used: classical ADPS16/BDGL16, quantum MATZOV.
+Toolchain: miniforge3 -> conda env `sage` -> `sage` 10.7 (conda-forge; note
+`sagemath-standard` does NOT exist on conda-forge, the package is just `sage`)
+-> `pip install git+https://github.com/malb/lattice-estimator`.
 
-## Finding 1: the verified tool REFUSED inputs my self-built estimator accepted
+## CORRECTION: the earlier "trivially easy" finding was MY error
 
-My `pqct/lattice_estimate.py` (self-built, cited-constants) returned a
-plausible-looking "~89 classical bits" for the paper profile. The verified
-estimator rejected the same input outright:
+An earlier version of this document reported that the verified estimator
+refused the paper profile with `SIS trivially easy. Please set norm bound < q.`
+and framed that as a finding about the paper's parameters. It was not. Three
+separate errors on my side produced it:
 
-```
-SIS trivially easy. Please set norm bound < q.
-```
+1. **Wrong bound.** I used the UNREDUCED Theorem 1 `gamma_bin`. The paper's own
+   evaluation (Section 8) uses a REDUCED bound from [EZS+19], Eq.(21),
+   `gamma_bin = max{B_Bin, B_Amor}`, obtained by additionally checking that
+   `||(g_i*(x*1-g_i))_i||` is a factor 4d below the theoretical bound, trading
+   completeness error (<1%) for a much smaller binding bound. Reduced:
+   1.43e14 vs unreduced 2.29e15 — a factor ~16.
+2. **Wrong phi.** I guessed `phi_1 = phi_2 = 11`. The paper states its
+   evaluation setting explicitly (line ~1600): `phi_1 = phi_2 = 15`.
+3. **Wrong norm.** I passed `norm=2` with a `sqrt(cols)` L2 inflation
+   (~62.5x). The estimator's own docstring shows the canonical usage is
+   `norm=+Infinity` with the L_inf bound passed directly (cf. its built-in
+   `Dilithium3_MSIS_WkUnf` example). The inflation was both unnecessary and
+   wrong.
 
-Cause: Gao Eq.(2) is `min{q, 2^(...)} > beta`. If `beta >= q` the left side
-is at most q, so the condition can never hold for any delta — the instance is
-trivially easy and no bit figure is meaningful. For the paper profile at
-phi1=11, gamma_bin = 1.23e15 > q = 5.63e14.
+With all three corrected, `gamma_bin = 1.43e14 < q = 5.63e14`, so the instance
+is well-posed and the paper's Eq.(2) argument goes through as published.
 
-My estimator lacked that guard. **Fixed**: `estimate_sis_hardness` now raises
-`LatticeEstimateError("... trivially easy ...")` when `beta_bound >= q`,
-matching the verified tool's behaviour. Pinned by
-`test_gamma_bin_above_q_refuses_hardness`. This is the concrete payoff of
-getting the real tool: it caught a false-comfort path in my own code.
+## Reproduced the paper's OWN published numbers
 
-## Finding 2: the norm mapping is unresolved, and it dominates the answer
-
-To feed a ring relation to an integer SIS estimator I must convert the
-relation's norm bound into an L2 bound on a solution vector. I used the
-conservative worst case (every one of `cols = (m+v)*d = 3904` integer
-coefficients saturating the inf-norm bound), giving `l2 = sqrt(cols) *
-gamma_bin` — a factor ~62.5 inflation.
-
-Sweep result (paper profile, phi2=11):
+`tools/reproduce_paper_binding.py` (pinned by
+`tests/test_paper_binding_reproduction.py`) recomputes Section 8's two printed
+values from the transcribed formulas at the paper's evaluation profile:
 
 ```
-phi1   gamma_bin        gamma_bin<q   l2_bound<q   estimator verdict
- 11    1.23e15          NO            NO           trivially easy
-  7    4.99e14          YES           NO           trivially easy
+                                  ours            paper prints
+2*gamma_bin (Eq.21 reduced)       2.8636e14       ~2.86e14    MATCH
+min{q, 2^(2 sqrt(n d log q log delta))}
+                                  4.0999e14       ~4.10e14    MATCH
+B_Amor < B_Bin  at S <= 2         True            claimed     MATCH
 ```
 
-So even where gamma_bin itself is below q, my conservative L2 conversion
-pushes the instance back over the line. The estimate is therefore dominated
-by MY MAPPING CHOICE, not by the paper's parameters. Reporting any bit
-number from it would be reporting my own assumption.
+Reproducing a published numeric claim is a far stronger check on a
+hand-transcribed formula than any self-consistency test: a wrong constant,
+exponent or factor would miss these values. Formulas live in
+`pqct/paper_bounds.py` as `gamma_bin_reduced` and `eq2_rhs` (single source;
+the tool delegates to them).
 
-This is exactly the interpretation that needs a lattice cryptographer:
-what norm, in which space, does the extracted relaxed opening actually
-satisfy, and what is the correct L2 bound for the SIS instance the binding
-reduction produces? Until that is answered, blocker item 5 stays open.
+A bug found and fixed while doing this: `eq2_rhs` originally computed
+`2^(2*sqrt(n*d*d*log2(q)*log2(delta)))` — double-counting `d` by using
+`n_module*d` and then multiplying by `d` again. That made the exponential term
+exceed `q`, so the `min` silently collapsed to `q` (5.63e14) instead of the
+paper's 4.10e14. The correct form uses `n*d` exactly once.
 
-Also computed for reference: `max_phi1_with_gamma_bin_lt_q = 7.4358` (the
-crossover where gamma_bin alone stays under q).
+## What still blocks a certified bit number
+
+The estimator itself does not yet run to completion in this environment. After
+fixing the two call-site errors above, it fails inside Sage:
+
+```
+TypeError: Cannot convert gmpy2.mpz to sage.rings.integer.Integer
+```
+
+raised in `sage.libs.mpmath.utils.mpfr_from_mpfval`, i.e. the gmpy2 build in
+this conda env is ABI-incompatible with Sage's mpfr conversion on the `erf`
+path used by the sieving cost models. All cost models (ADPS16, BDGL16, MATZOV,
+CheNgu12, GJ21, Kyber, LaaMosPol14, ABFKSW20, ABLR21, ChaLoy21) fail
+identically. Diagnosis of two earlier-looking failures, both mine:
+passing cost-model CLASSES instead of INSTANCES (which shifted `self`/`beta`
+and produced a misleading `short_vectors() missing 1 required positional
+argument: 'd'`), and passing native Python ints where Sage Integers are
+required.
+
+This is an environment/dependency problem, not a protocol or parameter
+problem. It does not affect anything in `pqct/` (pure stdlib).
+
+Attempted workaround that FAILED and should not be retried: removing gmpy2
+from the env (`conda remove --force gmpy2`) so mpmath falls back to its float
+path. gmpy2 is a hard Sage dependency, so this broke `import sage.all` entirely
+(`sage.structure.coerce` -> ModuleNotFoundError). gmpy2 was restored. The
+incompatibility is inside the conda build's gmpy2<->mpfr conversion and needs
+either a matching gmpy2 ABI, a distro-packaged Sage, or running upstream's own
+CI image — not more call-site tinkering.
 
 ## What is verified vs open
 
-- VERIFIED: the real estimator is installed and runs in a sandbox.
-- VERIFIED: my self-built estimator had a missing ill-posedness guard; fixed
-  and test-pinned.
-- VERIFIED: the toy fixtures fail Theorem 1's q/2 precondition (see
-  docs/PAPER_BOUNDS.md).
-- OPEN: the ring-relation -> integer-SIS norm mapping. No certified bit
-  number is claimed. No 128-bit claim is made anywhere.
+- VERIFIED: paper's reduced `gamma_bin` and Eq.(2) RHS reproduced to the
+  printed digits; instance is well-posed (`gamma_bin < q`).
+- VERIFIED: the toy fixtures fail Theorem 1's `q/2` precondition
+  (see docs/PAPER_BOUNDS.md).
+- VERIFIED: my self-built estimator lacked a `beta >= q` ill-posedness guard
+  that the verified tool enforces; added and test-pinned. That guard remains
+  correct and worth keeping — it catches genuinely infeasible parameter sets.
+- OPEN: an actual bit-security figure from the verified tool (blocked on the
+  Sage/gmpy2 environment issue). No certified number is claimed, and no
+  128-bit claim is made anywhere.
 
 ## Boundary
 
