@@ -210,12 +210,19 @@ OBLIGATIONS = (
             "superposition query collapses the adversary's state, so the "
             "forking lemma does not transfer."
         ),
-        status=Status.NOT_ATTEMPTED,
+        status=Status.CODE_EVIDENCED,
         evidence=(
-            "Requires a measure-and-reprogram or adaptive-reprogramming "
-            "argument (Don-Fehr-Majenz-Schaffner 2019/2022; "
-            "Grilo-Hovelmanns-Hulsing-Majenz 2021) instantiated for THIS "
-            "protocol's round structure. Research-paper scale."
+            "pqct/quantum_rewinding.py: rewinding is not fixed, it is ROUTED "
+            "AROUND. DFM'20 Cor.13 (measure-and-reprogram) turns the "
+            "FS-adversary into a classical prover S against the interactive "
+            "verifier at cost n!/(2q+n+1)^(2n) -- TIGHT per their Sec.6 -- and "
+            "classical extraction then applies to S. All six hypotheses of "
+            "Cor.13 are checked against THIS codebase: public-coin (H1), "
+            "zeta bound into x's hash = mFS ordering (H2, read from source), "
+            "oracle range = C (H3), n!/|C| ~ 2^-255 (H4), bounded Q (H5), "
+            "interactive knowledge-soundness via special_soundness (H6). No "
+            "collapsing/Thm-28 argument is owed: that is for a quantum prover "
+            "attacking the INTERACTIVE protocol, and Chitin is non-interactive."
         ),
     ),
     Obligation(

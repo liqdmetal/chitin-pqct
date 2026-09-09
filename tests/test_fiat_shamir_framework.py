@@ -133,15 +133,22 @@ class HonestyTests(unittest.TestCase):
         open_names = {o.name for o in framework.open_obligations}
         self.assertNotIn("classical-rewinding-to-3-transcripts", open_names)
         self.assertNotIn("commitment-binding-under-relaxation", open_names)
-        self.assertIn("quantum-rewinding-obstruction", open_names)
+        self.assertNotIn("quantum-rewinding-obstruction", open_names)
         self.assertIn("transcript-simulation-shvzk", open_names)
+        self.assertEqual(len(open_names), 1, "exactly one obligation should remain")
 
-    def test_quantum_rewinding_is_explicitly_not_attempted(self):
+    def test_quantum_rewinding_is_routed_around_not_fixed(self):
+        """Discharged via DFM'20 Cor.13 with all six hypotheses checked in
+        pqct/quantum_rewinding. The evidence must say ROUTED AROUND -- the
+        obstruction is real and is not being waved away."""
         obligation = next(
             o for o in OBLIGATIONS if o.name == "quantum-rewinding-obstruction"
         )
-        self.assertEqual(obligation.status, Status.NOT_ATTEMPTED)
-        self.assertFalse(obligation.discharged)
+        self.assertEqual(obligation.status, Status.CODE_EVIDENCED)
+        self.assertTrue(obligation.discharged)
+        self.assertIn("ROUTED", obligation.evidence)
+        self.assertIn("TIGHT", obligation.evidence)
+        self.assertIn("non-interactive", obligation.evidence)
 
     def test_code_evidenced_obligations_cite_real_modules(self):
         for obligation in OBLIGATIONS:
