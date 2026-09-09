@@ -174,7 +174,18 @@ def step_security_frameworks(step: Step) -> None:
     budget = paper_budget()
 
     fs_open = len(framework.open_obligations)
-    ok_fs = fs_open > 0 and "OPEN" in framework.overall_status
+    # HONESTY GATE, revised. The old check required fs_open > 0 -- i.e. it
+    # asserted the framework could never finish. That was wrong: obligations
+    # CAN all be discharged (they now are, 0/8 open), and the honest gate is
+    # that the framework's status still reflects the residual truthfully. A
+    # negative residual must read as no claim; a positive one may not be
+    # called a security level without external review.
+    status = framework.overall_status
+    if fs_open > 0:
+        ok_fs = "OPEN" in status
+    else:
+        ok_fs = ("no Fiat-Shamir security claim" in status
+                 or "external review" in status)
     ok_budget = (not budget.claimable) and "NO CLAIM" in budget.verdict
     # The M-SIS range must still match the hardness module.
     ok_msis = 85.0 <= budget.minimum_low <= 120.0

@@ -73,14 +73,18 @@ class BudgetArithmeticTests(unittest.TestCase):
         self.assertEqual(paper_budget().binding_component.name, "M-SIS binding")
 
     def test_total_loss_sums_the_losses(self):
-        """Total = classical AFK'22 loss (64) + QROM penalty beyond classical
-        (196) + truncation (0) = 260 at Q=2^64. Previously asserted 256 for
-        the two placeholders (128+128); the computed bound replaced them."""
+        """Total = classical AFK'22 (64) + QROM-beyond-classical (195) +
+        truncation/ZK leak. The ZK leak was hard-coded 0.0 until
+        shvzk_bound showed the 6-sigma default leaks 2^-15; it is now
+        reported as shortfall vs a 100-bit ZK target (~85). Pin the SUM
+        identity, and pin that the leak is no longer silently zero."""
         budget = paper_budget(quantum_queries=2 ** 64)
-        self.assertAlmostEqual(budget.total_loss, 259.0, places=1)
         self.assertAlmostEqual(
             budget.total_loss, sum(l.bits for l in budget.losses), places=6
         )
+        leak = next(l for l in budget.losses if "ZK leak" in l.name)
+        self.assertGreater(leak.bits, 80.0, "6-sigma ZK leak must be visible")
+        self.assertLess(leak.bits, 90.0)
 
     def test_residual_is_minimum_minus_loss(self):
         budget = paper_budget()

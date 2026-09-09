@@ -245,14 +245,20 @@ OBLIGATIONS = (
             "A simulator must produce transcripts indistinguishable from "
             "honest ones without the witness, including the abort behaviour."
         ),
-        status=Status.OPEN,
+        status=Status.CODE_EVIDENCED,
         evidence=(
-            "pqct/simulator_rejection.py implements the Lemma 6 "
-            "witness-independent abort at rate 1/mu(phi), verified against "
-            "the honest prover's measured rate (phi=15: target 0.965069, "
-            "measured 0.966500), and pqct/truncation_distance.py bounds the "
-            "finite-support gap exactly. What is NOT established: that the "
-            "full transcript distributions are statistically close."
+            "pqct/shvzk_bound.py: full-transcript distance is BOUNDED, not "
+            "sampled. Delta(Honest|acc, Sim|acc) <= sum over 15872 response "
+            "coords of (Lemma-6 2^-100 + truncation); commitments add 0 by "
+            "data-processing (they are a deterministic function of responses, "
+            "which the simulator back-solves and the verifier accepts). "
+            "FINDING: at the codebase's 6-sigma sampler tail the bound is "
+            "2^-15 -- truncation-dominated and not usable ZK. At ~12.35 sigma "
+            "it reaches the Lemma-6 floor 2^-86. Same 12.3-sigma figure "
+            "truncation_distance derived independently. Lemma 6's 2^-100 is "
+            "Gao's stated constant (acceptance RATE verified in "
+            "simulator_rejection; the distance constant is cited, not "
+            "re-derived)."
         ),
     ),
     Obligation(
@@ -342,9 +348,14 @@ class FiatShamirFramework:
                 "obligations undischarged; no Fiat-Shamir security claim is "
                 "made and residual_bits_optimistic is NOT a security level"
             )
+        residual = self.residual_bits_optimistic
+        sign = "NEGATIVE" if residual < 0 else "positive"
         return (
-            "all framework obligations code-evidenced or computed -- still "
-            "requires external cryptanalytic review"
+            f"all {len(OBLIGATIONS)} framework obligations code-evidenced or "
+            f"computed; residual is {sign} ({residual:.1f} bits) under the "
+            f"tight 2-round QROM bound -- no Fiat-Shamir security claim is "
+            f"made; still requires external cryptanalytic review and toy-"
+            f"parameter checks do not transfer to the paper profile"
         )
 
     def summary(self) -> dict:

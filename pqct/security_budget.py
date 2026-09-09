@@ -234,18 +234,34 @@ def default_losses(quantum_queries: int = 2 ** 64) -> tuple:
             established=True,
         ),
         Loss(
-            name="truncation (finite-support Gaussians)",
-            bits=0.0,
+            name="truncation / ZK leak (finite-support Gaussians)",
+            bits=_truncation_zk_loss_bits(),
             basis=(
-                "pqct/truncation_distance.py: exactly erfc(T/(sigma*sqrt2)) "
-                "per coordinate, composed linearly. At the tails required "
-                "for 2^-100 this is negligible against the other terms, but "
-                "the CURRENT 6-sigma default gives only ~2^-29 per "
-                "coordinate."
+                "pqct/shvzk_bound.py: the SHVZK distance is BOUNDED at "
+                "sum-over-coords of (Lemma6 2^-100 + erfc(T/sigma sqrt2)). "
+                "At the codebase's CURRENT 6-sigma default this is 2^-15 -- a "
+                "real ZK leak, previously mis-stated here as 0.0. Reported as "
+                "shortfall against a 100-bit ZK target (100 + log2 distance). "
+                "At the ~12.35-sigma tail the bound reaches the Lemma-6 floor "
+                "2^-86 and this drops to ~14."
             ),
             established=True,
         ),
     )
+
+
+def _truncation_zk_loss_bits() -> float:
+    """ZK leak from the SHVZK bound at the sampler tail ACTUALLY in use.
+
+    A statistical distance 2^-b between honest and simulated transcripts is
+    a distinguisher of advantage 2^-b. Reported as shortfall against a
+    100-bit ZK target so a small b shows up as a LARGE loss, not a rounding
+    error. Previously hard-coded 0.0, which hid a 2^-15 leak.
+    """
+    from .shvzk_bound import paper_profile_bound
+
+    log2_distance = paper_profile_bound(6.0).total_log2      # ~ -15 at 6 sigma
+    return max(0.0, 100.0 + log2_distance)
 
 
 @dataclass(frozen=True)

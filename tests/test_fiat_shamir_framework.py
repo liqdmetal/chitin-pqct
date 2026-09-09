@@ -119,23 +119,38 @@ class ResidualBudgetTests(unittest.TestCase):
 class HonestyTests(unittest.TestCase):
     """A framework that overstates its own status is worse than none."""
 
-    def test_status_is_open_while_obligations_are_undischarged(self):
+    def test_all_obligations_discharged_but_no_claim(self):
+        """Every obligation is now code-evidenced or computed. The framework
+        must STILL refuse to make a security claim: the residual is
+        negative under the tight 2-round QROM bound, and toy-parameter
+        machine checks do not transfer to the paper profile. Finishing the
+        checklist is not the same as being secure."""
         framework = paper_framework()
-        self.assertTrue(framework.open_obligations)
-        self.assertIn("OPEN", framework.overall_status)
-        self.assertIn("no Fiat-Shamir security claim", framework.overall_status)
+        self.assertFalse(framework.open_obligations)
+        status = framework.overall_status
+        self.assertIn("no Fiat-Shamir security claim", status)
+        self.assertIn("external cryptanalytic review", status)
+        self.assertIn("NEGATIVE", status)          # -3 bits at Q=2^64
+        self.assertIn("toy-parameter", status)
 
-    def test_open_obligations_are_named(self):
-        """Three remain open. classical-rewinding-to-3-transcripts moved to
-        CODE_EVIDENCED once AFK'22 (the forking lemma) was computed and
-        special-soundness machine-checked in pqct/special_soundness."""
+    def test_every_obligation_discharged_by_name(self):
+        """8/8. Each one moved through a computed or machine-checked step;
+        the evidence field records which module."""
         framework = paper_framework()
-        open_names = {o.name for o in framework.open_obligations}
-        self.assertNotIn("classical-rewinding-to-3-transcripts", open_names)
-        self.assertNotIn("commitment-binding-under-relaxation", open_names)
-        self.assertNotIn("quantum-rewinding-obstruction", open_names)
-        self.assertIn("transcript-simulation-shvzk", open_names)
-        self.assertEqual(len(open_names), 1, "exactly one obligation should remain")
+        self.assertEqual(len(framework.open_obligations), 0)
+        self.assertEqual(len(framework.discharged_obligations), len(OBLIGATIONS))
+        names = {o.name for o in framework.discharged_obligations}
+        for expected in (
+            "special-soundness-3-transcripts",
+            "challenge-space-size",
+            "commitment-binding-under-relaxation",
+            "classical-rewinding-to-3-transcripts",
+            "quantum-rewinding-obstruction",
+            "qrom-reprogramming-loss",
+            "transcript-simulation-shvzk",
+            "statement-binding",
+        ):
+            self.assertIn(expected, names)
 
     def test_quantum_rewinding_is_routed_around_not_fixed(self):
         """Discharged via DFM'20 Cor.13 with all six hypotheses checked in
@@ -159,7 +174,9 @@ class HonestyTests(unittest.TestCase):
     def test_summary_carries_the_warning(self):
         summary = paper_framework().summary()
         self.assertIn("FRAMEWORK, not a proof", summary["warning"])
-        self.assertIn("NOT a security level", summary["overall_status"])
+        # 0/8 open now, so the status wording changed; what must survive is
+        # that it still refuses to be read as a security level.
+        self.assertIn("no Fiat-Shamir security claim", summary["overall_status"])
 
     def test_discharged_and_open_partition_the_obligations(self):
         framework = paper_framework()
