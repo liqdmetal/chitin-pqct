@@ -9,10 +9,13 @@ findings remain useful as provenance but must not be read as current status.
 - Ring-valued Protocol 1 path, canonical encoding, challenge ordering, sampled
   rejection harness, extraction laboratories, authorization/provenance layer,
   and synthetic value-node tests exist.
-- AFK'22 classical and DFM'20 QROM accounting is wired into the executable
-  framework; the DFM bound is treated as tight for the generic theorem.
+- AFK'22 classical and DFM'20 QROM accounting is implemented as a
+  conditional framework. DFM's generic bound may be tight in its theorem
+  model, but applicability to Chitin's full ring protocol and special-
+  soundness argument remains pending external review.
 - Three-transcript special-soundness experiments, relaxation accounting,
-  quantum-rewinding scope checks, and a computed SHVZK bound exist.
+  quantum-rewinding scope checks, and a computed SHVZK bound exist; these are
+  executable evidence and proof sketches, not a formal reduction.
 - The sampler ships the 13-sigma tail and the budget reads that live setting.
 - Current stack gate: 649 tests passed, all 7 stack steps green at the last
   verified run.

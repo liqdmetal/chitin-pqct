@@ -7,9 +7,10 @@ no DERO integration, no consensus changes.
 
 - Repository: `https://github.com/liqdmetal/chitin-pqct` (private).
 - Current local worktree must be checked before relying on this document.
-- The executable Fiat–Shamir ledger has eight obligations. The current code
-  marks them code-evidenced or computed, but that is **not a cryptographic
-  proof** and does not justify a security claim.
+- The executable Fiat–Shamir ledger tracks eight obligations. Several have
+  executable evidence or computed bookkeeping, but the full special-soundness
+  reduction and theorem-hypothesis transfer remain externally unverified; this
+  is **not a cryptographic proof** and does not justify a security claim.
 - The project verdict remains `NO CLAIM`.
 - The conservative two-round QROM residual is negative at the configured
   query budget; the statement-bound one-round variant is a research branch,
