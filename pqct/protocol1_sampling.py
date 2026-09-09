@@ -12,6 +12,7 @@ made.
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass
 from decimal import Decimal, getcontext
 from hashlib import shake_256
@@ -86,6 +87,20 @@ class FiniteDiscreteGaussian:
         )
         object.__setattr__(self, "_weights", weights)
         object.__setattr__(self, "_total_weight", sum(weights, Decimal(0)))
+        # Cumulative table for O(log n) inversion sampling. The old sampler
+        # did a linear CDF scan, O(support) per draw; with the ZK-grade tail
+        # (13 sigma) the support is ~3100 for the paper's largest profile
+        # and the scan dominated. bisect_right(cumulative, target) returns
+        # the first index whose cumulative weight EXCEEDS target, which is
+        # exactly the linear scan's "target < running" stopping point -- so
+        # samples are byte-identical to the previous implementation for the
+        # same seed. Verified against recorded test vectors.
+        cumulative = []
+        running = Decimal(0)
+        for weight in weights:
+            running += weight
+            cumulative.append(running)
+        object.__setattr__(self, "_cumulative", tuple(cumulative))
 
     @property
     def support(self) -> tuple[int, ...]:
@@ -112,12 +127,10 @@ class FiniteDiscreteGaussian:
 
     def sample(self, source: XofByteSource) -> int:
         target = _uniform_unit(source) * self.total_weight
-        running = Decimal(0)
-        for value, weight in zip(self.support, self.weights):
-            running += weight
-            if target < running:
-                return value
-        return self.support[-1]
+        index = bisect_right(self._cumulative, target)
+        if index >= len(self.support):
+            return self.support[-1]
+        return self.support[index]
 
 
 def sample_box(source: XofByteSource, count: int, bound: int) -> tuple[int, ...]:
@@ -264,7 +277,18 @@ def _ringwise_mul(challenge: Sequence[int], flat_values: Sequence[int], n: int) 
     )
 
 
-def tail_for_sigma(sigma: Decimal, multiplier: int = 6, minimum: int = 8) -> int:
+# ZK-grade tail, in sigmas. Derived in pqct.shvzk_bound: the composed SHVZK
+# distance over the paper profile's 15,872 response coordinates reaches the
+# Lemma-6 floor (2^-86) at ~12.35 sigma. 13 is the integer ceiling with a
+# small margin. At the old default of 6 the bound was 2^-15 -- a 15-bit
+# distinguisher, i.e. not zero-knowledge in any usable sense.
+ZK_TAIL_SIGMAS = 13
+
+# Kept ONLY for speed-sensitive toy fixtures that do not make a ZK claim.
+FAST_TOY_TAIL_SIGMAS = 6
+
+
+def tail_for_sigma(sigma: Decimal, multiplier: int = ZK_TAIL_SIGMAS, minimum: int = 8) -> int:
     """Support tail scaled to the distribution's OWN sigma.
 
     A single fixed tail shared by profiles with very different sigmas is a
@@ -274,17 +298,14 @@ def tail_for_sigma(sigma: Decimal, multiplier: int = 6, minimum: int = 8) -> int
     REJECT in the goodness-of-fit work). Scaling per profile removes both
     failure modes.
 
-    CORRECTION: an earlier version of this docstring claimed ~6 sigma leaves
-    the omitted mass "far below the paper's 2^-100 target". That was WRONG.
-    The truncation distance is erfc(T/(sigma*sqrt 2)), which depends only on
-    T/sigma, so at 6 sigma it is ~1.97e-9 (about 2^-29) per coordinate --
-    REGARDLESS of sigma. Reaching 2^-100 per coordinate needs ~11.6 sigma,
-    and ~12.25 sigma once composed across a few thousand transcript
-    coefficients. See pqct.truncation_distance and docs/TRUNCATION_DISTANCE.md.
-
-    The 6-sigma default is kept because it is fast and adequate for the toy
-    research fixtures, but it is NOT a 2^-100 support. Use
-    `tail_for_target_distance` when the composed bound matters.
+    DEFAULT CHANGED 6 -> 13 (ZK_TAIL_SIGMAS). The truncation distance is
+    erfc(T/(sigma*sqrt 2)), depending only on T/sigma: at 6 sigma it is
+    ~2^-29 per coordinate REGARDLESS of sigma, and composed over the paper
+    profile's 15,872 coordinates the SHVZK bound was 2^-15 -- truncation
+    dominated the Lemma-6 floor by 71 bits. At 13 sigma the composed bound
+    is 2^-86, at the floor. The shipped sampler now matches the bound it
+    is analysed under. Pass multiplier=FAST_TOY_TAIL_SIGMAS explicitly for
+    speed in fixtures that make no ZK claim.
     """
     if sigma <= 0:
         raise SamplingError("sigma must be positive")

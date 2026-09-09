@@ -45,8 +45,13 @@ class Protocol5Error(ValueError):
 
 
 def _tail_for_sigma(sigma: Decimal, minimum: int = 8) -> int:
-    """Per-profile support tail; delegates to the shared helper (one source)."""
-    return tail_for_sigma(sigma, multiplier=6, minimum=minimum)
+    """Per-profile support tail; delegates to the shared helper (one source).
+
+    Uses the shared ZK-grade default (ZK_TAIL_SIGMAS = 13). Previously pinned
+    multiplier=6 here, which silently overrode the shared default and would
+    have left Protocol 5 at the 2^-15 leak even after Protocol 1 was fixed.
+    """
+    return tail_for_sigma(sigma, minimum=minimum)
 
 
 def _constant_poly(value: int, params) -> RingElement:

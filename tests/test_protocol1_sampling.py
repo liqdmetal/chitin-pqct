@@ -88,13 +88,40 @@ class Protocol1SamplingTests(unittest.TestCase):
             RejectionPolicy(Decimal("0"), Decimal("1"), Decimal("1"))
 
     def test_tail_for_sigma_scales_with_sigma(self):
-        from pqct.protocol1_sampling import tail_for_sigma
+        from pqct.protocol1_sampling import ZK_TAIL_SIGMAS, tail_for_sigma
         small = tail_for_sigma(Decimal("2"))
         large = tail_for_sigma(Decimal("20"))
         self.assertGreaterEqual(small, 8)
-        self.assertEqual(large, 120)
+        # Default is the ZK-grade tail, not the old 6. Pin it via the
+        # constant so the test tracks the shipped value.
+        self.assertEqual(large, 20 * ZK_TAIL_SIGMAS)
+        self.assertEqual(ZK_TAIL_SIGMAS, 13)
         with self.assertRaises(SamplingError):
             tail_for_sigma(Decimal(0))
+
+    def test_bisect_sampler_matches_linear_scan(self):
+        """The O(log n) sampler must be byte-identical to the linear CDF scan
+        it replaced, for the same seed stream, at the ZK tail."""
+        from pqct.protocol1_sampling import (
+            FiniteDiscreteGaussian, XofByteSource, _uniform_unit, tail_for_sigma,
+        )
+
+        def linear(g, source):
+            target = _uniform_unit(source) * g.total_weight
+            running = Decimal(0)
+            for value, weight in zip(g.support, g.weights):
+                running += weight
+                if target < running:
+                    return value
+            return g.support[-1]
+
+        for sigma in (Decimal(1), Decimal(15), Decimal(120)):
+            g = FiniteDiscreteGaussian(sigma, tail_for_sigma(sigma))
+            for i in range(64):
+                seed = b"bisect" + i.to_bytes(2, "big")
+                self.assertEqual(
+                    g.sample(XofByteSource(seed)), linear(g, XofByteSource(seed))
+                )
 
     def test_auto_tail_gives_per_profile_support(self):
         from pqct.protocol1_sampling import Protocol1DistributionParameters

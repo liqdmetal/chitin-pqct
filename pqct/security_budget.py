@@ -251,16 +251,18 @@ def default_losses(quantum_queries: int = 2 ** 64) -> tuple:
 
 
 def _truncation_zk_loss_bits() -> float:
-    """ZK leak from the SHVZK bound at the sampler tail ACTUALLY in use.
+    """ZK leak from the SHVZK bound at the sampler tail ACTUALLY SHIPPED.
 
-    A statistical distance 2^-b between honest and simulated transcripts is
-    a distinguisher of advantage 2^-b. Reported as shortfall against a
-    100-bit ZK target so a small b shows up as a LARGE loss, not a rounding
-    error. Previously hard-coded 0.0, which hid a 2^-15 leak.
+    Reads ZK_TAIL_SIGMAS from protocol1_sampling so this number tracks the
+    code: change the default there and the budget moves. Previously this
+    hard-coded 6.0 (and before that 0.0), so a sampler fix would not have
+    been reflected here. A statistical distance 2^-b is a distinguisher of
+    advantage 2^-b; reported as shortfall vs a 100-bit ZK target.
     """
+    from .protocol1_sampling import ZK_TAIL_SIGMAS
     from .shvzk_bound import paper_profile_bound
 
-    log2_distance = paper_profile_bound(6.0).total_log2      # ~ -15 at 6 sigma
+    log2_distance = paper_profile_bound(float(ZK_TAIL_SIGMAS)).total_log2
     return max(0.0, 100.0 + log2_distance)
 
 

@@ -74,17 +74,18 @@ class BudgetArithmeticTests(unittest.TestCase):
 
     def test_total_loss_sums_the_losses(self):
         """Total = classical AFK'22 (64) + QROM-beyond-classical (195) +
-        truncation/ZK leak. The ZK leak was hard-coded 0.0 until
-        shvzk_bound showed the 6-sigma default leaks 2^-15; it is now
-        reported as shortfall vs a 100-bit ZK target (~85). Pin the SUM
-        identity, and pin that the leak is no longer silently zero."""
+        truncation/ZK leak. The leak tracks the SHIPPED sampler tail
+        (ZK_TAIL_SIGMAS): at the old 6-sigma default it was ~85 (a 2^-15
+        leak); at the shipped 13 sigma the SHVZK bound sits at the Lemma-6
+        floor 2^-86 and the leak reads ~14. Pin the sum identity and pin
+        that the leak reflects the fix, not the old default."""
         budget = paper_budget(quantum_queries=2 ** 64)
         self.assertAlmostEqual(
             budget.total_loss, sum(l.bits for l in budget.losses), places=6
         )
         leak = next(l for l in budget.losses if "ZK leak" in l.name)
-        self.assertGreater(leak.bits, 80.0, "6-sigma ZK leak must be visible")
-        self.assertLess(leak.bits, 90.0)
+        self.assertLess(leak.bits, 20.0, "13-sigma tail must have closed the leak")
+        self.assertGreater(leak.bits, 10.0, "Lemma-6 floor ~14 must still be visible")
 
     def test_residual_is_minimum_minus_loss(self):
         budget = paper_budget()
