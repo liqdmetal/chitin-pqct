@@ -69,7 +69,9 @@ from .parameter_validation import validate_protocol1_parameters
 from .parameter_validation import validate_protocol5_parameters
 from .transaction_proof import TransactionProof
 from .transaction_proof import TransactionProofError
+from .transaction_proof import TransactionVerification
 from .transaction_proof import prove_transaction
+from .transaction_proof import verify_transaction
 from .binary_protocol1 import Protocol1Error, Protocol1Parameters, Protocol1Proof, derive_protocol1_challenge, prove_protocol1, verify_protocol1
 from .binary_protocol1_ring import (RingProtocol1Error, RingProtocol1Parameters, RingProtocol1Proof, build_protocol1_ring_transcript, prove_protocol1_ring, verify_protocol1_ring)
 from .binary_hmc import (

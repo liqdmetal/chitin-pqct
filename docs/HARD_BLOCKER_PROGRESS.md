@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 242 tests pass.
+- 259 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -96,6 +96,24 @@
   CI at phi1=1,2,4 (tools/check_completeness_error.py). First numeric
   cross-check of a theorem claim against harness behavior. See
   docs/COMPLETENESS_ERROR.md.
+- `pqct.transaction_proof.verify_transaction` is a WITNESS-FREE verifier
+  for the composed proof: it recomputes every acceptance flag from public
+  data (commitments, both proof sets, statement, key, signs) instead of
+  trusting the prover's self-computed `*_ok` fields. 10 adversarial tests
+  (swapped proofs, swapped/perturbed commitments, forged flags, flipped
+  signs, dimension attacks) all rejected; honest tx accepted.
+- `Protocol1DistributionParameters(auto_tail=True)` now derives each
+  profile's support tail from its OWN sigma (~6*sigma via the shared
+  `tail_for_sigma` helper), removing the shared-tail footgun that caused
+  the false goodness-of-fit REJECT. Default stays off so existing callers
+  are unaffected. Protocol 5's `_tail_for_sigma` delegates to the same
+  single source.
+- Gao's published binding numbers reproduced from the transcribed
+  Section 8 formulas: 2*gamma_bin = 2.864e14 (paper prints ~2.86e14) and
+  Eq.(2) RHS = 4.100e14 (paper prints ~4.10e14). This RETIRES the earlier
+  "instance trivially easy" finding as my own error: it used the unreduced
+  Theorem 1 bound, a guessed phi_1=11 instead of the paper's 15, and
+  double-counted d in Eq.(2). See docs/VERIFIED_LATTICE_ESTIMATE.md.
 
 ## Still open
 
@@ -129,15 +147,11 @@
   elements) is implemented end-to-end in `protocol5`, and Protocol 1 +
   Protocol 5 are composed over shared commitments in
   `transaction_proof`. Remaining: the third rejection stage's exact
-  D_3 convention (finite-support reference only), and certified
-  verifier norm bounds (currently research placeholders).
+  D_3 convention (finite-support reference only). Verifier norm bounds
+  are now confirmed to match the paper's step-17 formulas exactly
+  (500-dpi transcription, test-pinned); what remains uncertified is the
+  bit-security level (blocker item 5).
 - External cryptanalysis.
-- `Protocol1DistributionParameters` shares one `gaussian_tail` for both
-  `t_profile` (small sigma) and `opening_profile` (larger sigma); tests
-  must hand-tune a shared value, risking exactly the truncation bug
-  found and fixed this session. `protocol5._tail_for_sigma` (~6*sigma
-  per profile) is the demonstrated fix pattern; folding it back into
-  Protocol1DistributionParameters remains to do.
 
 ## Boundary
 

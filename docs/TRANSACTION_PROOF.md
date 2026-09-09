@@ -51,7 +51,47 @@ The CLI demo shows both cheats rejected; at transaction level the
 fail-fast (layer 1) fires first. Layer 2 is what protects a verifier
 who does not hold the witness.
 
-## Verified (5 tests + CLI demo)
+## Witness-free verifier (added after adversarial review)
+
+`verify_transaction` recomputes every acceptance flag from PUBLIC data
+only — commitments, both proof sets, statement, key, and signs. It never
+reads the secret amounts or openings.
+
+This matters because `prove_transaction`'s own `*_ok` fields are
+self-computed: a dishonest prover controls them. Self-verification is
+not verification. An outside verifier must run `verify_transaction`,
+which re-checks:
+
+1. dimensions (one commitment + one Protocol 1 proof per amount, correct
+   row counts, bit_width == key message width == p5.k);
+2. every Protocol 1 binary proof against ITS OWN commitment, with the
+   per-amount domain-separated statement;
+3. the Protocol 5 conservation proof (f_0 range gate, f/z norms,
+   commitment equation);
+4. signs == conservation.lambdas;
+5. the shared-commitment identity, so the two halves cannot prove facts
+   about different values.
+
+`TransactionVerification.accepted` requires all of it. Per-gate results
+are exposed (`binary_failures`, `conservation_gates`) so a rejection
+says which check failed rather than just returning false.
+
+## Adversarial coverage (10 tests)
+
+`tests/test_transaction_proof_adversarial.py` — each case is an attack
+that must be caught by recomputation, not by trusted flags:
+
+- swapped Protocol 1 proofs (proof[1] := proof[0]) -> rejected, failure
+  index reported
+- swapped public commitments -> rejected (each proof binds wrong B_i)
+- perturbed commitment set -> conservation rejected (shared identity)
+- forged `*_ok=True` on the dataclass -> no effect, still rejected
+- flipped signs -> signs_consistent false
+- dropped proof / wrong bit_width / truncated commitment row /
+  empty inputs -> dimensions_ok false
+- honest tx -> accepted, all four conservation gates true
+
+## Verified (5 prover tests + 10 adversarial + CLI demo)
 
 - Honest conserved tx (+10 +6 -16): accepted; shared_commitments_ok,
   binary_ok (3 Protocol 1 proofs), conservation_ok all True; P5 accepted
@@ -67,7 +107,10 @@ who does not hold the witness.
 - No range proof on the corrector-free columns beyond the bit-width
   bound; no fee/authorization/replay/state binding; no recovery
   encryption. This is conservation + binaryness, not a full CT.
-- Verifier norm bounds are research placeholders, not certified.
+- Verifier norm bounds ARE the paper's own step-17 formulas
+  (6*phi_3*T_3*sqrt(d) and 2*phi_2*T_2*sqrt(m*d)), transcribed at 500 dpi
+  and test-pinned -- see docs/PROTOCOL5.md. What is NOT certified is the
+  underlying bit-security level (blocker item 5).
 - No soundness/SHVZK/Fiat-Shamir proof: Theorem 1/2 reductions and
   external cryptanalysis remain open (TESTNET_SCOPE Section 1).
 

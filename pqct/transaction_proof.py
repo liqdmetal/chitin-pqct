@@ -18,7 +18,7 @@ from .binary_protocol1_ring import RingProtocol1Parameters, verify_protocol1_rin
 from .hmc import HMCKey
 from .protocol1_sampled import SampledProtocol1Result, prove_protocol1_ring_sampled
 from .protocol1_sampling import Protocol1DistributionParameters
-from .protocol5 import Protocol5Parameters, Protocol5Result
+from .protocol5 import Protocol5Error, Protocol5Parameters, Protocol5Result
 from .protocol5 import prove_linear_equation, verify_linear_equation
 from .ring_commitment import RingElement
 
@@ -45,8 +45,124 @@ class TransactionProof:
         return self.shared_commitments_ok and self.binary_ok and self.conservation_ok
 
 
+@dataclass(frozen=True)
+class TransactionVerification:
+    """Witness-free verification result for a composed transaction.
+
+    Every field is recomputed from PUBLIC data only (commitments, proofs,
+    statement, key, signs). It never consults the secret amounts or
+    openings, so a malicious prover cannot influence these flags.
+    """
+
+    binary_ok: bool
+    binary_count: int
+    binary_failures: tuple[int, ...]
+    conservation_ok: bool
+    conservation_gates: tuple[bool, bool, bool, bool]
+    signs_consistent: bool
+    dimensions_ok: bool
+
+    @property
+    def accepted(self) -> bool:
+        return (
+            self.dimensions_ok
+            and self.signs_consistent
+            and self.binary_ok
+            and self.conservation_ok
+        )
+
+
 def _constant_poly(value: int, params) -> RingElement:
     return RingElement.from_coeffs((value,) + (0,) * (params.n - 1), params)
+
+
+def verify_transaction(
+    *,
+    statement: bytes,
+    key: HMCKey,
+    bit_commitments: Sequence[Sequence[RingElement]],
+    binary_proofs: Sequence[SampledProtocol1Result],
+    conservation: Protocol5Result,
+    signs: Sequence[int],
+    bit_width: int,
+    p1_params: RingProtocol1Parameters,
+    p5: Protocol5Parameters,
+) -> TransactionVerification:
+    """Independently verify a composed transaction from PUBLIC data only.
+
+    This is the witness-free counterpart to prove_transaction. It must be
+    what an outside verifier runs -- prove_transaction's own self-checks are
+    not evidence of soundness, since a dishonest prover controls them.
+
+    Checks performed:
+      1. dimensions: one commitment + one Protocol 1 proof per signed amount,
+         each commitment having the right row count, and signs matching the
+         conservation proof's lambdas.
+      2. binary: each Protocol 1 proof re-verified against ITS OWN commitment
+         with the per-amount domain-separated statement.
+      3. conservation: Protocol 5 re-verified (f_0 range gate, f/z norms,
+         commitment equation) against the SAME commitments.
+      4. the conservation proof must commit to exactly these commitments, so
+         the two halves cannot prove facts about different values.
+    """
+    public = tuple(tuple(row) for row in bit_commitments)
+    proofs = tuple(binary_proofs)
+    sign_tuple = tuple(int(value) for value in signs)
+
+    dimensions_ok = (
+        bool(public)
+        and len(public) == len(proofs)
+        and len(public) == len(sign_tuple)
+        and all(len(row) == key.ring_rows for row in public)
+        and bit_width == key.message_width
+        and bit_width == p5.k
+    )
+    signs_consistent = sign_tuple == tuple(conservation.lambdas)
+    shared = conservation.bit_commitments == public
+
+    binary_failures: list[int] = []
+    if dimensions_ok:
+        for index, result in enumerate(proofs):
+            if not verify_protocol1_ring(
+                statement + b"|amount|" + index.to_bytes(4, "big"),
+                key, key, key, key,
+                (public[index],),
+                result.proof,
+                p1_params,
+            ):
+                binary_failures.append(index)
+    else:
+        binary_failures = list(range(len(proofs)))
+    binary_ok = dimensions_ok and not binary_failures
+
+    gates: tuple[bool, bool, bool, bool] = (False, False, False, False)
+    conservation_ok = False
+    if dimensions_ok and signs_consistent and shared:
+        try:
+            p5_verification = verify_linear_equation(
+                statement=statement + b"|conservation", key_c=key,
+                bit_commitments=public, lambdas=sign_tuple,
+                proof=conservation.proof, p5=p5,
+            )
+            gates = (
+                p5_verification.f0_in_range,
+                p5_verification.f_norms_ok,
+                p5_verification.z_norm_ok,
+                p5_verification.commitment_equation_ok,
+            )
+            conservation_ok = p5_verification.accepted
+        except (Protocol5Error, TypeError, ValueError):
+            conservation_ok = False
+
+    return TransactionVerification(
+        binary_ok=binary_ok,
+        binary_count=len(proofs),
+        binary_failures=tuple(binary_failures),
+        conservation_ok=conservation_ok,
+        conservation_gates=gates,
+        signs_consistent=signs_consistent,
+        dimensions_ok=dimensions_ok,
+    )
 
 
 def prove_transaction(
@@ -186,5 +302,11 @@ def prove_transaction(
     )
 
 
-__all__ = ["TransactionProof", "TransactionProofError", "prove_transaction"]
+__all__ = [
+    "TransactionProof",
+    "TransactionProofError",
+    "TransactionVerification",
+    "prove_transaction",
+    "verify_transaction",
+]
 
