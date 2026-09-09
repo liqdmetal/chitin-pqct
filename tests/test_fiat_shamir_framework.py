@@ -66,21 +66,40 @@ class LossTests(unittest.TestCase):
 class ResidualBudgetTests(unittest.TestCase):
     """The substantive finding: the optimistic margin vanishes at Q=2^64."""
 
-    def test_residual_is_essentially_zero_at_2_to_the_64(self):
+    def test_residual_is_deeply_negative_at_2_to_the_64(self):
+        """CORRECTED. An earlier version asserted ~0 bits here, which was
+        computed for a three-move protocol. The implemented protocol has two
+        Fiat-Shamir challenges (zeta then x), so extraction needs a 6-leaf
+        tree and QROM loss compounds per round: 256 - 320 - 256 = -320."""
         framework = paper_framework(quantum_queries=2 ** 64)
-        self.assertLess(abs(framework.residual_bits_optimistic), 1.0)
-
-    def test_residual_goes_negative_for_larger_query_budgets(self):
-        self.assertLess(
-            paper_framework(quantum_queries=2 ** 80).residual_bits_optimistic, 0.0
+        self.assertAlmostEqual(
+            framework.residual_bits_optimistic, -320.0, delta=1.0
         )
-        self.assertLess(
-            paper_framework(quantum_queries=2 ** 96).residual_bits_optimistic, 0.0
-        )
+        self.assertAlmostEqual(framework.forking_loss, 320.0, delta=1.0)
+        self.assertAlmostEqual(framework.qrom_loss, 256.0, delta=1.0)
 
-    def test_residual_is_comfortable_for_small_query_budgets(self):
+    def test_residual_is_negative_even_for_small_query_budgets(self):
+        """The multi-round losses (5+4)*log2(Q) = 9*log2(Q) outrun the 256
+        bits of soundness once log2(Q) > ~28, so there is no comfortable
+        regime under the corrected structure."""
+        self.assertLess(
+            paper_framework(quantum_queries=2 ** 32).residual_bits_optimistic, 0.0
+        )
+        # Only a very small query budget leaves anything at all.
         self.assertGreater(
-            paper_framework(quantum_queries=2 ** 32).residual_bits_optimistic, 100.0
+            paper_framework(quantum_queries=2 ** 16).residual_bits_optimistic, 0.0
+        )
+
+    def test_reducing_to_one_round_recovers_320_bits(self):
+        """What the non-adaptive zeta attempt would buy, if sound."""
+        two_round = paper_framework(quantum_queries=2 ** 64)
+        one_round = FiatShamirFramework(
+            56, 8, 64, 2 ** 64, transcripts_needed=3, challenge_rounds=1
+        )
+        self.assertAlmostEqual(
+            one_round.residual_bits_optimistic
+            - two_round.residual_bits_optimistic,
+            320.0, delta=1.0,
         )
 
     def test_needing_fewer_transcripts_recovers_margin(self):

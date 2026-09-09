@@ -97,11 +97,15 @@ def soundness_error_bits(weight: int, coefficient_bound: int,
 def forking_loss_bits(queries: int, transcripts: int = 3) -> float:
     """Classical forking-lemma loss.
 
+    CORRECTED: `transcripts` must be the number of TREE LEAVES, not the
+    number of challenges per round. The implemented protocol has TWO
+    Fiat-Shamir challenges (zeta then x), so extraction needs a 2x3 = 6-leaf
+    tree, not 3 transcripts -- see pqct/multiround_qrom.py, which reads the
+    structure off the derivation functions.
+
     Extracting `transcripts` accepting transcripts from a prover that
     succeeds with probability eps costs roughly eps^transcripts / Q^(t-1),
     i.e. a loss of about (transcripts-1)*log2(Q) bits plus the eps powers.
-    Reported as the log2(Q) multiple; the eps powers are the caller's
-    security-loss budget.
     """
     if queries <= 0:
         raise FrameworkError("query count must be positive")
@@ -110,21 +114,23 @@ def forking_loss_bits(queries: int, transcripts: int = 3) -> float:
     return (transcripts - 1) * math.log2(queries)
 
 
-def qrom_reprogramming_loss_bits(queries: int) -> float:
-    """QROM adaptive-reprogramming loss, O(Q * sqrt(eps)) style.
+def qrom_reprogramming_loss_bits(queries: int, rounds: int = 1) -> float:
+    """QROM adaptive-reprogramming loss: 2*rounds*log2(Q).
 
-    The standard measure-and-reprogram / adaptive reprogramming results
-    (Don-Fehr-Majenz-Schaffner; Grilo-Hovelmanns-Hulsing-Majenz) lose a
-    factor polynomial in Q, commonly quoted as Q^2 for search-type
-    reductions. 2*log2(Q) is therefore the conservative bookkeeping figure.
+    CORRECTED: the loss COMPOUNDS PER REPROGRAMMED ROUND. The
+    measure-and-reprogram technique (Don-Fehr-Majenz-Schaffner) loses
+    O(Q^2) per round, so a mu-round protocol loses O(Q^{2mu}). Charging
+    2*log2(Q) is only right for a single-challenge (three-move) protocol,
+    and this one has mu = 2.
 
-    This is a PLACEHOLDER FOR BOOKKEEPING, not a theorem application: which
-    result applies depends on the protocol's exact round structure, and that
-    determination is one of the open obligations.
+    Which precise theorem applies remains an open obligation; this is
+    conservative bookkeeping with the correct round dependence.
     """
     if queries <= 0:
         raise FrameworkError("query count must be positive")
-    return 2.0 * math.log2(queries)
+    if rounds < 1:
+        raise FrameworkError("round count must be at least one")
+    return 2.0 * rounds * math.log2(queries)
 
 
 OBLIGATIONS = (
@@ -255,7 +261,8 @@ class FiatShamirFramework:
     coefficient_bound: int
     degree: int
     quantum_queries: int
-    transcripts_needed: int = 3
+    transcripts_needed: int = 6   # 2 zeta branches x 3 x leaves
+    challenge_rounds: int = 2     # zeta then x -- see multiround_qrom
 
     @property
     def challenge_space(self) -> int:
@@ -275,7 +282,9 @@ class FiatShamirFramework:
 
     @property
     def qrom_loss(self) -> float:
-        return qrom_reprogramming_loss_bits(self.quantum_queries)
+        return qrom_reprogramming_loss_bits(
+            self.quantum_queries, self.challenge_rounds
+        )
 
     @property
     def residual_bits_optimistic(self) -> float:
