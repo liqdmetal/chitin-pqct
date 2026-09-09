@@ -39,6 +39,7 @@ def _fixture(q: int, k: int, m: int, seed: bytes):
     p5 = Protocol5Parameters.from_research_bounds(
         p=2, w=4, k=k, B=1, m=m, d=8,
         phi2=Decimal("4"), phi3=Decimal("4"), sign_max=2,
+        omega_l1=3, account_count=3,
     )
     return key, distribution, p1_params, p5
 

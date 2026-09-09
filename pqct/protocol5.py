@@ -17,6 +17,7 @@ from .linear_equation_transcript import (
     f0_in_canonical_range,
     reconstruct_f0_over_integers,
 )
+from .paper_bounds import gamma_le
 from .protocol1_sampling import (
     FiniteDiscreteGaussian,
     Protocol1DistributionParameters,
@@ -142,6 +143,8 @@ class Protocol5Parameters:
     d: int
     phi2: Decimal
     phi3: Decimal
+    omega_l1: int
+    account_count: int
     f_bound: Decimal
     z_bound: Decimal
     challenge_domain: bytes = b"PQCT-PROTOCOL5-CHALLENGE-V1"
@@ -151,23 +154,51 @@ class Protocol5Parameters:
             raise Protocol5Error("Protocol 5 dimensions must be positive")
         if self.phi2 <= 0 or self.phi3 <= 0:
             raise Protocol5Error("phi2 and phi3 must be positive")
+        if self.omega_l1 <= 0 or self.account_count <= 0:
+            raise Protocol5Error("omega_l1 and account_count must be positive")
         if self.f_bound <= 0 or self.z_bound <= 0:
             raise Protocol5Error("verifier bounds must be positive")
 
     @property
     def t2_prime(self) -> Decimal:
-        """T2' = B*w*p*sqrt(3*m*d) for the rc opening vector (width m)."""
-        return Decimal(self.B * self.w * self.p) * Decimal(3 * self.m * self.d).sqrt()
+        """T2' = B*w*p*sqrt(m*d*(||omega||_1^2 + S + 1)) -- Gao eq.(48).
+
+        omega is the PUBLIC linear-function coefficient vector (lambda_i),
+        S = account_count. Earlier code wrongly used Protocol 1's
+        sqrt(3*m*d) binary T2 here; corrected against the paper's
+        Theorem 2 / Appendix C eq.(48) via high-res PDF transcription.
+        """
+        inner = Decimal(self.m * self.d) * Decimal(
+            self.omega_l1 * self.omega_l1 + self.account_count + 1
+        )
+        return Decimal(self.B * self.w * self.p) * inner.sqrt()
+
+    @property
+    def gamma_le_required(self) -> Decimal:
+        """Gao Theorem 2: the HMC must be gamma_LE-binding for this relation.
+
+        gamma_LE = 4*phi_3*m*d*B*w*p*sqrt(||omega||_1^2 + S + 1), computed
+        from pqct.paper_bounds (paper-transcribed formula, not a placeholder).
+        This is the bound the underlying commitment scheme must actually
+        satisfy for Protocol 5's soundness theorem to apply.
+        """
+        return gamma_le(
+            self.phi3, self.m, self.d, self.B, self.w, self.p,
+            self.omega_l1, self.account_count,
+        )
 
     @classmethod
     def from_research_bounds(
         cls, *, p: int, w: int, k: int, B: int, m: int, d: int,
         phi2: Decimal, phi3: Decimal, sign_max: int,
+        omega_l1: int, account_count: int,
     ) -> "Protocol5Parameters":
         t3 = Decimal(sign_max * p) * Decimal(w * k).sqrt()
-        t2p = Decimal(B * w * p) * Decimal(3 * m * d).sqrt()
+        inner = Decimal(m * d) * Decimal(omega_l1 * omega_l1 + account_count + 1)
+        t2p = Decimal(B * w * p) * inner.sqrt()
         return cls(
             p=p, w=w, k=k, B=B, m=m, d=d, phi2=phi2, phi3=phi3,
+            omega_l1=omega_l1, account_count=account_count,
             f_bound=Decimal(6) * phi3 * t3 * Decimal(d).sqrt(),
             z_bound=Decimal(2) * phi2 * t2p * Decimal(m * d).sqrt(),
         )
@@ -198,6 +229,29 @@ def compute_sign_max(lambdas: Sequence[int]) -> int:
     positive = sum(value for value in lambdas if value > 0)
     negative = -sum(value for value in lambdas if value < 0)
     return max(positive, negative)
+
+
+def protocol5_params_for_lambdas(
+    lambdas: Sequence[int], *,
+    p: int, w: int, k: int, B: int, m: int, d: int,
+    phi2: Decimal, phi3: Decimal,
+) -> Protocol5Parameters:
+    """Build Protocol5Parameters consistent with a concrete lambda vector.
+
+    omega_l1 = sum |lambda_i| and account_count = S are PUBLIC relation
+    data; the verifier recomputes the T2'/z bound from them, so they must
+    match the lambdas the proof actually uses.
+    """
+    if not lambdas:
+        raise Protocol5Error("lambda vector cannot be empty")
+    if any(value == 0 for value in lambdas):
+        raise Protocol5Error("lambda entries must be nonzero")
+    return Protocol5Parameters.from_research_bounds(
+        p=p, w=w, k=k, B=B, m=m, d=d, phi2=phi2, phi3=phi3,
+        sign_max=compute_sign_max(lambdas),
+        omega_l1=sum(abs(value) for value in lambdas),
+        account_count=len(lambdas),
+    )
 
 
 def _l2(elements: Sequence[RingElement]) -> Decimal:
@@ -249,6 +303,12 @@ def verify_linear_equation(
     public = tuple(tuple(row) for row in bit_commitments)
     if len(public) != len(lambdas) or not public:
         raise Protocol5Error("commitment/lambda count mismatch")
+    # The parameter set's omega/account fields must match the PUBLIC lambdas;
+    # otherwise the T2'/z bound would be computed from a different relation.
+    if p5.omega_l1 != sum(abs(value) for value in lambdas):
+        raise Protocol5Error("p5.omega_l1 does not match the lambda vector")
+    if p5.account_count != len(lambdas):
+        raise Protocol5Error("p5.account_count does not match lambda count")
     if key_c.message_width != p5.k:
         raise Protocol5Error("HMC message width must equal k")
     if len(proof.response_tail) != p5.k - 1:
@@ -354,6 +414,10 @@ def prove_linear_equation(
     except BalanceCompositionError as error:
         raise Protocol5Error(str(error)) from error
     lambdas = tuple(amount.sign for amount in signed)
+    if p5.omega_l1 != sum(abs(value) for value in lambdas):
+        raise Protocol5Error("p5.omega_l1 does not match the amount signs")
+    if p5.account_count != len(lambdas):
+        raise Protocol5Error("p5.account_count does not match the amount count")
     t3 = compute_t3(lambdas, p5.p, p5.w, p5.k)
     t2_prime = p5.t2_prime
 
@@ -480,6 +544,7 @@ __all__ = [
     "derive_protocol5_challenge",
     "derive_ring_cycle_mask",
     "prove_linear_equation",
+    "protocol5_params_for_lambdas",
     "ring_cycle_mask_weighted_sum_is_zero",
     "verify_linear_equation",
 ]

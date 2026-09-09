@@ -5,7 +5,7 @@ from pqct.balance_composition import SignedAmount
 from pqct.binary_protocol1_ring import RingProtocol1Parameters
 from pqct.matrix_generation import generate_hmc_key
 from pqct.protocol1_sampling import Protocol1DistributionParameters
-from pqct.protocol5 import Protocol5Parameters
+from pqct.protocol5 import Protocol5Parameters, protocol5_params_for_lambdas
 from pqct.ring_commitment import ToyParameters
 from pqct.transaction_proof import TransactionProofError
 from pqct.transaction_proof import prove_transaction
@@ -26,16 +26,19 @@ class TransactionProofTests(unittest.TestCase):
             B=1, p=2, k=self.k, m=self.m, d=8,
             phi1=2, phi2=8,
         )
-        self.p5 = Protocol5Parameters.from_research_bounds(
-            p=2, w=4, k=self.k, B=1, m=self.m, d=8,
-            phi2=Decimal("4"), phi3=Decimal("4"), sign_max=2,
+
+    def _p5_for(self, amounts):
+        lambdas = tuple(amount.sign for amount in amounts)
+        return protocol5_params_for_lambdas(
+            lambdas, p=2, w=4, k=self.k, B=1, m=self.m, d=8,
+            phi2=Decimal("4"), phi3=Decimal("4"),
         )
 
     def _prove(self, amounts, seed=None, statement=b"tx-statement"):
         return prove_transaction(
             seed=seed or self.seed, statement=statement, key=self.key,
             amounts=amounts, bit_width=self.k, distribution=self.distribution,
-            p1_params=self.p1_params, p5=self.p5,
+            p1_params=self.p1_params, p5=self._p5_for(amounts),
             phi2=Decimal("4"), phi3=Decimal("4"),
         )
 

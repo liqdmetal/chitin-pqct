@@ -6,6 +6,7 @@ from pqct.matrix_generation import generate_hmc_key
 from pqct.protocol5 import Protocol5Error, Protocol5Parameters
 from pqct.protocol5 import compute_sign_max, compute_t3
 from pqct.protocol5 import derive_ring_cycle_mask
+from pqct.protocol5 import protocol5_params_for_lambdas
 from pqct.protocol5 import prove_linear_equation, ring_cycle_mask_weighted_sum_is_zero
 from pqct.protocol5 import verify_linear_equation
 from pqct.ring_commitment import ToyParameters
@@ -45,23 +46,33 @@ class Protocol5EndToEndTests(unittest.TestCase):
         self.p5 = Protocol5Parameters.from_research_bounds(
             p=2, w=4, k=self.k, B=1, m=self.m, d=8,
             phi2=Decimal("4"), phi3=Decimal("4"), sign_max=2,
+            omega_l1=3, account_count=3,
+        )
+
+    def _p5_for(self, amounts):
+        """Protocol 5 params consistent with the amounts' lambda vector."""
+        lambdas = tuple(amount.sign for amount in amounts)
+        return protocol5_params_for_lambdas(
+            lambdas, p=2, w=4, k=self.k, B=1, m=self.m, d=8,
+            phi2=Decimal("4"), phi3=Decimal("4"),
         )
 
     def _prove(self, amounts, seed=b"p5-e2e", statement=b"e2e-statement", max_attempts=512):
         return prove_linear_equation(
             seed=seed, statement=statement, key=self.key,
-            amounts=amounts, bit_width=self.k, p5=self.p5,
+            amounts=amounts, bit_width=self.k, p5=self._p5_for(amounts),
             phi2=Decimal("4"), phi3=Decimal("4"), max_attempts=max_attempts,
         )
 
     def test_conserved_transaction_proves_and_verifies(self):
-        result = self._prove((SignedAmount(10, 1), SignedAmount(6, 1), SignedAmount(16, -1)))
+        amounts = (SignedAmount(10, 1), SignedAmount(6, 1), SignedAmount(16, -1))
+        result = self._prove(amounts)
         self.assertTrue(result.conserved)
         self.assertEqual(result.weighted_sum, 0)
         verification = verify_linear_equation(
             statement=b"e2e-statement", key_c=self.key,
             bit_commitments=result.bit_commitments, lambdas=result.lambdas,
-            proof=result.proof, p5=self.p5, challenge_x=result.challenge_x,
+            proof=result.proof, p5=self._p5_for(amounts), challenge_x=result.challenge_x,
         )
         self.assertTrue(verification.accepted)
         self.assertTrue(all((
@@ -76,17 +87,19 @@ class Protocol5EndToEndTests(unittest.TestCase):
         self.assertEqual(first, second)
 
     def test_verifier_without_challenge_uses_fiat_shamir(self):
-        result = self._prove((SignedAmount(7, 1), SignedAmount(7, -1)))
+        amounts = (SignedAmount(7, 1), SignedAmount(7, -1))
+        result = self._prove(amounts)
         verification = verify_linear_equation(
             statement=b"e2e-statement", key_c=self.key,
             bit_commitments=result.bit_commitments, lambdas=result.lambdas,
-            proof=result.proof, p5=self.p5,
+            proof=result.proof, p5=self._p5_for(amounts),
         )
         self.assertTrue(verification.accepted)
         self.assertEqual(verification.commitment_equation_ok, True)
 
     def test_tampered_response_tail_rejected(self):
-        result = self._prove((SignedAmount(10, 1), SignedAmount(10, -1)))
+        amounts = (SignedAmount(10, 1), SignedAmount(10, -1))
+        result = self._prove(amounts)
         first = result.proof.response_tail[0]
         bumped_coeffs = tuple(
             (value + 1) % first.params.q for value in first.coeffs
@@ -100,7 +113,7 @@ class Protocol5EndToEndTests(unittest.TestCase):
         verification = verify_linear_equation(
             statement=b"e2e-statement", key_c=self.key,
             bit_commitments=result.bit_commitments, lambdas=result.lambdas,
-            proof=bad_proof, p5=self.p5, challenge_x=result.challenge_x,
+            proof=bad_proof, p5=self._p5_for(amounts), challenge_x=result.challenge_x,
         )
         self.assertFalse(verification.accepted)
 
@@ -119,6 +132,7 @@ class Protocol5CheatTests(unittest.TestCase):
         self.p5 = Protocol5Parameters.from_research_bounds(
             p=2, w=4, k=self.k, B=1, m=self.m, d=8,
             phi2=Decimal("4"), phi3=Decimal("4"), sign_max=2,
+            omega_l1=3, account_count=3,
         )
 
     def test_mod_q_cheat_cannot_produce_accepted_proof(self):

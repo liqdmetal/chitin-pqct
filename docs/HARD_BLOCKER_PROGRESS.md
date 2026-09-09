@@ -2,7 +2,7 @@
 
 ## Current verified state
 
-- 196 tests pass.
+- 229 tests pass.
 - `compileall` passes for `pqct`, `tests`, and `tools`.
 - `git diff --check` passes.
 - `pip check` reports no broken requirements.
@@ -81,6 +81,16 @@
   gate (soundness, witness-free). CLI demo
   `tools/demo_transaction_proof.py` runs honest/non-conserved/mod-q-cheat
   scenarios. See docs/TRANSACTION_PROOF.md.
+- `pqct.paper_bounds` implements Gao's EXACT Theorem 1/2 bound formulas
+  (gamma_bin, gamma_LE, q/2 precondition, relation bounds, mu/completeness
+  error) transcribed from the 500-dpi PDF and unit-tested against hand
+  values. `pqct.parameter_validation` composes them with the core-SVP
+  estimator into one chain (params -> binding bound -> delta -> BKZ ->
+  bits). Two honest findings: (1) the lab's TOY fixtures FAIL Theorem 1's
+  own q/2 precondition (pinned by test), and (2) Gao's reported profile
+  lands ~89 classical bits under OUR self-built estimator (not the
+  verified tool), which is exactly why blocker item 5 still matters.
+  See docs/PAPER_BOUNDS.md.
 
 ## Still open
 
