@@ -125,10 +125,13 @@ class HonestyTests(unittest.TestCase):
         self.assertIn("OPEN", framework.overall_status)
         self.assertIn("no Fiat-Shamir security claim", framework.overall_status)
 
-    def test_four_obligations_are_open_and_named(self):
+    def test_open_obligations_are_named(self):
+        """Three remain open. classical-rewinding-to-3-transcripts moved to
+        CODE_EVIDENCED once AFK'22 (the forking lemma) was computed and
+        special-soundness machine-checked in pqct/special_soundness."""
         framework = paper_framework()
         open_names = {o.name for o in framework.open_obligations}
-        self.assertIn("classical-rewinding-to-3-transcripts", open_names)
+        self.assertNotIn("classical-rewinding-to-3-transcripts", open_names)
         self.assertIn("quantum-rewinding-obstruction", open_names)
         self.assertIn("commitment-binding-under-relaxation", open_names)
         self.assertIn("transcript-simulation-shvzk", open_names)

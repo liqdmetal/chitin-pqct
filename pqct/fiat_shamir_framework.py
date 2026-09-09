@@ -181,12 +181,19 @@ OBLIGATIONS = (
             "From ONE non-interactive prover, obtain three accepting "
             "transcripts sharing a first message (forking lemma)."
         ),
-        status=Status.OPEN,
+        status=Status.CODE_EVIDENCED,
         evidence=(
-            "Not established. The repo GENERATES transcript families "
-            "(pqct/protocol1_family.py) by construction from a known "
-            "witness; it does not extract them from an arbitrary "
-            "accepting prover. forking_loss_bits() gives the bookkeeping."
+            "Attema-Fehr-Kloss 2022 IS the multi-round forking lemma: "
+            "kappa_FS <= (Q+1)*kappa, computed in pqct/forking_bound "
+            "(64 bits at Q=2^64). It takes special-soundness as INPUT, and "
+            "that is machine-checked in pqct/special_soundness: five "
+            "adversaries (honest, non-affine, non-bit b=2, spliced witness, "
+            "repeated challenge), zero counterexamples -- every accepting "
+            "triple yields a relaxed witness or is refused. The non-bit case "
+            "is decisive: it FOOLS the extractor's cross-consistency but the "
+            "verifier's equation (B) rejects it, which is Step 3 of the "
+            "argument working as designed. Still toy-parameter, enumerated "
+            "adversaries, honest-key model."
         ),
     ),
     Obligation(
