@@ -124,37 +124,49 @@ def extract_bits(cost: dict) -> dict:
 
 
 def gaussian_heuristic_check(gamma: float, n_int: int, m_int: int, q: int) -> dict:
-    """Independent validity gate: is `gamma` even a plausible SIS bound?
+    """Report the Gaussian heuristic at BOTH the full and optimal dimension.
 
-    The SIS kernel lattice has dimension m_int and determinant q^n_int, so the
-    Gaussian heuristic predicts the shortest nonzero vector has norm about
-        GH ~= q^(n_int/m_int).
-    If gamma >> GH, short solutions are ABUNDANT (a counting argument, not a
-    search argument), the instance is trivially easy, and any bit number an
-    estimator prints for it is meaningless.
+    CORRECTED. An earlier version of this gate evaluated the Gaussian
+    heuristic ONLY at the full column count m_int and declared the paper
+    profile "trivially easy by counting". That verdict was WRONG, and the
+    error was mine: it is the wrong dimension.
 
-    This gate exists because the estimator and the Gaussian heuristic
-    DISAGREED on the paper profile: passing gamma_bin=1.43e14 as a uniform
-    bound gave gamma/GH ~= 5.1e10 (trivially easy by counting) while
-    lattice-estimator still reported ~83 bits. A tool that cannot be trusted
-    to notice its own contradiction is worse than no tool.
+    Short vectors do exist in the full m_int-column lattice, but an attacker
+    does not have to work there -- they DROP columns and attack an optimal
+    sub-dimension m' = sqrt(n_int*log2(q)/log2(delta)). Gao's Eq.(2)
+    exponential 2^(2*sqrt(n*d*log2 q*log2 delta)) is exactly the minimum of
+    delta^m' * q^(n_int/m') over m', i.e. it already encodes this. For the
+    paper profile m' ~ 3787, and the real lattice-estimator independently
+    reported working dimensions d in 3378..4008 -- agreement that confirms
+    m', not m_int, is the operative dimension.
+
+    "Solutions exist" is a counting statement; "solutions are findable
+    cheaply" is a cost statement. Conflating them produced a false alarm.
+    Use pqct.msis_hardness.analyze_msis for the criterion that matters.
     """
     log_q = math.log2(q)
-    log_gh = log_q * n_int / m_int
-    gh = 2.0 ** log_gh
-    ratio = gamma / gh
+    log_gh_full = log_q * n_int / m_int
+    gh_full = 2.0 ** log_gh_full
+    ratio_full = gamma / gh_full
     return {
-        "log2_gaussian_heuristic_min_norm": log_gh,
-        "gaussian_heuristic_min_norm": gh,
-        "gamma_over_gh": ratio,
-        "gamma_above_gaussian_heuristic": ratio > 1.0,
-        "verdict": (
-            "TRIVIALLY EASY by counting: gamma exceeds the Gaussian-heuristic "
-            "shortest-vector norm, so nonzero solutions are abundant and no "
-            "bit-security number from a uniform scalar bound is meaningful"
-            if ratio > 1.0 else
-            "plausible: gamma is below the Gaussian-heuristic minimum, so "
-            "solutions are not guaranteed to exist and hardness is meaningful"
+        "full_dimension": {
+            "m_int": m_int,
+            "log2_gh_min_norm": log_gh_full,
+            "gamma_over_gh": ratio_full,
+            "meaning": (
+                "counting only: short vectors exist in the full-column "
+                "lattice. This does NOT imply the instance is easy, and must "
+                "not be read as a hardness verdict."
+            ),
+        },
+        "correct_criterion": (
+            "see pqct.msis_hardness.analyze_msis -- Gao Eq.(2) with the "
+            "optimal sublattice dimension m' = sqrt(n_int*log2 q/log2 delta)"
+        ),
+        "superseded_verdict": (
+            "an earlier version of this function called the paper profile "
+            "'TRIVIALLY EASY by counting'. That was a false alarm caused by "
+            "evaluating the Gaussian heuristic at the wrong (full) dimension."
         ),
     }
 
@@ -223,30 +235,38 @@ def estimate(S: int = S_DEFAULT, norm_inf: bool = True) -> dict:
         for v in result["attacks"].values()
         if v.get("log2_rop") is not None and not math.isinf(v["log2_rop"])
     ]
-    gate_failed = result["validity_gate"]["gamma_above_gaussian_heuristic"]
+    gate = result["validity_gate"]
     result["summary"] = {
         "min_bits": min(bits) if bits else None,
         "max_bits": max(bits) if bits else None,
         "quantum_bits": result["attacks"].get("quantum_MATZOV", {}).get("log2_rop"),
         "paper_claim": "128-bit security of partially amortized binary proof at S<=2",
         "meets_paper_claim": bool(bits) and min(bits) >= 128.0,
-        "usable_as_security_level": not gate_failed,
+        "interpretation": (
+            "These are lattice-estimator's numbers for a SINGLE scalar-bound "
+            "reading of gamma_bin. The independent delta-criterion analysis in "
+            "pqct.msis_hardness (Gao Eq.2 at the optimal sublattice dimension) "
+            "gives 91-118 bits for the same profile and AGREES with the "
+            "estimator's delta to ~3e-4, so the two methods are consistent. "
+            "Both land BELOW the paper's claimed 128-bit level, which traces "
+            "to the legacy delta=1.0045 <-> 128-bit mapping inherited from "
+            "MatRiCT rather than to an arithmetic error."
+        ),
         "blocker_status": (
-            "OPEN -- numbers below are NOT a security level. gamma_bin is the "
-            "HMC BINDING PARAMETER (Definition 3's gamma in COpen), not a "
-            "uniform SIS solution-norm bound. The SIS instance that must be "
-            "hard has a MIXED per-column bound structure (small dr on the m "
-            "randomness columns, small dm on the v message columns), which "
-            "lattice-estimator's single scalar length_bound cannot express. "
-            "Feeding gamma_bin uniformly exceeds the Gaussian heuristic by "
-            "~5e10, so the printed bits come from an instance that is "
-            "trivially easy by counting -- they are an artifact of a wrong "
-            "norm mapping, not a hardness result. Resolving this needs a "
-            "lattice cryptographer to state the correct SIS instance."
-            if gate_failed else
-            "numbers are consistent with the Gaussian heuristic and may be "
-            "reported as an estimate (still not certified: single mapping, "
-            "no external review)"
+            "OPEN but NARROWED. No longer blocked on tooling: the estimator "
+            "runs and two independent methods agree on delta. What remains is "
+            "a genuine cryptographic judgement -- (a) the exact M-SIS instance "
+            "for HMC binding has MIXED per-column bounds (small dr on the m "
+            "randomness columns, small dm on the v message columns) that a "
+            "single scalar length_bound cannot express, and (b) delta -> bits "
+            "is a model choice. A lattice cryptographer must settle both. "
+            "No certified bit-security level is claimed here."
+        ),
+        "superseded": (
+            "an earlier run of this tool reported the profile 'trivially easy "
+            "by counting'. That was a FALSE ALARM from evaluating the Gaussian "
+            "heuristic at the full column count instead of the optimal "
+            "sublattice dimension; see validity_gate.superseded_verdict."
         ),
     }
     return result
