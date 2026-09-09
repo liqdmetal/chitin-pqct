@@ -15,11 +15,11 @@ security proof or concrete bit-security level exists.
 |---|---|
 | challenge-space soundness | 256-bit toy challenge-space scale |
 | classical AFK'22 loss | 64 bits at `Q=2^64`, conditional on the interactive extractor |
-| DFM'20 QROM loss beyond classical | 195 bits at `Q=2^64` under the theorem's hypotheses; generic bound is tight in its model, but transfer to Chitin remains externally unverified |
+| DFM'20 QROM loss estimate | 195 bits at `Q=2^64` under the modeled two-round abstraction; applicability to the full Chitin transcript and all theorem hypotheses remains unverified |
 | SHVZK finite-support/truncation | computed from the shipped 13-sigma tail; exact Gao distribution theorem remains external |
 | M-SIS | model-dependent ~92–117-bit range in current estimator interpretation |
 | M-LWE | model-dependent ~94–119-bit range; no certified claim |
-| final verdict | **NO CLAIM**, residual negative under the configured two-round ledger |
+| final verdict | **NO CLAIM**; the modeled two-round ledger has a negative residual, conditional on the abstraction and unverified theorem transfer |
 
 ## Why the zero-open status is not a security claim
 
