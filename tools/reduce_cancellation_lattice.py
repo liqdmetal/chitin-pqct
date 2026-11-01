@@ -48,9 +48,10 @@ BKZ returns an upper bound on lambda_1 (a short vector it found), so:
 from __future__ import annotations
 
 import json
+import os
 import sys
 
-sys.path.insert(0, "/mnt/c/Users/officeone/pq-ct-research")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fpylll import BKZ, GSO, IntegerMatrix, LLL      # noqa: E402
 from fpylll.fplll.bkz_param import BKZParam         # noqa: E402

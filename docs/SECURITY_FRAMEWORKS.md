@@ -34,8 +34,8 @@ ledger, but it is a research variant and is not a deployment recommendation.
 ## Reproduce
 
 ```text
-cd C:/Users/officeone/pq-ct-research
-python -m pytest tests/ -q
+cd <repo>
+python -m pytest tests/ -v
 python tools/stack_check.py
 ```
 

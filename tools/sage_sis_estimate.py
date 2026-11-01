@@ -3,7 +3,7 @@
 Runs ONLY inside the sandboxed WSL user (see docs/VERIFIED_LATTICE_ESTIMATE.md):
 
     wsl -u pqct -e bash -lc '
-      cd /mnt/c/Users/officeone/pq-ct-research
+      cd <repo>
       ~/miniforge3/envs/sage/bin/sage -python tools/sage_sis_estimate.py
     '
 
@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from decimal import Decimal
 
@@ -88,7 +89,7 @@ from estimator import SIS
 from estimator.reduction import ADPS16, BDGL16, MATZOV
 from sage.all import ZZ, oo
 
-sys.path.insert(0, "/mnt/c/Users/officeone/pq-ct-research")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pqct.paper_bounds import gamma_bin_reduced
 
 Q = 2 ** 49 - 2 ** 18 + 2 ** 9 + 1

@@ -9,17 +9,16 @@ different reason than this document previously claimed — see the correction.
 Dedicated unprivileged user, no sudo, uid-scoped nftables:
 
 ```
-wsl -u pqct -e bash -lc '~/miniforge3/envs/sage/bin/sage -python \
-  /mnt/c/Users/officeone/pq-ct-research/tools/sage_sis_estimate.py [phi1]'
+tools/sage_sis_estimate.py [phi1]   (run from repository root)
 ```
 
 Verified sandbox properties:
 
 ```
 pqct -> internet            HTTP 200   (allowed: needed for installs)
-pqct -> LAN 192.168.4.73    BLOCKED    (protects desktop + redbox)
+pqct -> LAN                BLOCKED    (all private ranges)
 pqct -> sudo                DENIED
-root / ryan1 / hermes       UNAFFECTED (rules are meta skuid != 1001 accept)
+other accounts             UNAFFECTED (rules are meta skuid != 1001 accept)
 ```
 
 Toolchain: miniforge3 -> conda env `sage` -> `sage` 10.7 (conda-forge; note

@@ -2,9 +2,17 @@
 
 **Chitin** is the working name for this construction: chitin is the polymer
 mycelial cell walls are made of — the rigid structure that makes the organism
-hard to break. It sits in the Spore → Mycelium → Sap → Physarum → Rhizome
-line as that organism's actual armor. Name verified clear of existing
-crypto/PQ projects (only the biopolymer uses it).
+hard to break. Name verified clear of existing crypto/PQ projects (only the
+biopolymer uses it).
+
+## Lineage
+
+This repository is the **confidential-transactions research track** of the
+Chitin family (lattice-based commitments). The separate **proof-of-work
+track** (bounded-weight syndrome decoding, golden vectors, attack audits)
+lives in [`chitin-pow`](https://github.com/liqdmetal/pq-mining). The
+chain-side integration of either track is maintained out-of-band; both
+repositories are research-only until independently reviewed.
 
 Post-quantum *resistant* confidential-account transaction research for a future DERO-compatible account mode.
 
@@ -54,7 +62,7 @@ The PQ-CT work must therefore begin as an independent reference implementation. 
 From Git Bash:
 
 ```bash
-cd /c/Users/officeone/pq-ct-research
+cd <repo>
 python -m unittest discover -s tests -v
 ```
 
@@ -69,4 +77,4 @@ python -m unittest discover -s tests -v
 7. Independent cryptographic review.
 8. Only then: shadow-ledger integration and migration design.
 
-See `docs/THREAT_MODEL.md` and `docs/ROADMAP.md`.
+See `docs/THREAT_MODEL.md`, `docs/ROADMAP.md`, and `FAQ.md`.

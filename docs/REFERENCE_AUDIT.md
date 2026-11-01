@@ -1,7 +1,7 @@
 # Reference Implementation Audit — Gao / RingCT_Implementation
 
 **Repository:** https://github.com/GoldSaintEagle/RingCT_Implementation
-**Local checkout:** `C:\Users\officeone\pq-ct-research\vendor\RingCT_Implementation`
+**Local checkout:** the vendored `RingCT_Implementation` tree (see `vendor/`).
 **Purpose:** understand the paper-to-code boundary. This checkout is vendor research material, not trusted cryptographic code and not part of the PQ-CT package API.
 
 ## Verification performed
