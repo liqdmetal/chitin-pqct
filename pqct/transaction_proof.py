@@ -14,11 +14,11 @@ from decimal import Decimal
 from typing import Sequence
 
 from .balance_composition import SignedAmount
-from .binary_protocol1_ring import RingProtocol1Parameters, verify_protocol1_ring
+from .binary_protocol1_ring import RingProtocol1Parameters, RingProtocol1Proof, verify_protocol1_ring
 from .hmc import HMCKey
 from .protocol1_sampled import SampledProtocol1Result, prove_protocol1_ring_sampled
 from .protocol1_sampling import Protocol1DistributionParameters
-from .protocol5 import Protocol5Error, Protocol5Parameters, Protocol5Result
+from .protocol5 import Protocol5Error, Protocol5Parameters, Protocol5Result, Protocol5Proof
 from .protocol5 import prove_linear_equation, verify_linear_equation
 from .ring_commitment import RingElement
 
@@ -29,7 +29,10 @@ class TransactionProofError(ValueError):
 
 @dataclass(frozen=True)
 class TransactionProof:
-    """Composed transaction artifact: shared commitments + both proof halves."""
+    """PRIVATE experiment result. Contains amounts and masks; never serialize it.
+
+    Use :meth:`public_proof` to export the witness-free transaction artifact.
+    """
 
     bit_width: int
     amounts: tuple[SignedAmount, ...]
@@ -43,6 +46,24 @@ class TransactionProof:
     @property
     def accepted(self) -> bool:
         return self.shared_commitments_ok and self.binary_ok and self.conservation_ok
+
+    def public_proof(self) -> "PublicTransactionProof":
+        return PublicTransactionProof(
+            self.bit_width, self.bit_commitments,
+            tuple(result.proof for result in self.binary_proofs),
+            self.conservation.proof, tuple(amount.sign for amount in self.amounts),
+        )
+
+
+@dataclass(frozen=True)
+class PublicTransactionProof:
+    """Only public commitments/responses; no masks, witnesses or prover flags."""
+
+    bit_width: int
+    bit_commitments: tuple[tuple[RingElement, ...], ...]
+    binary_proofs: tuple[RingProtocol1Proof, ...]
+    conservation: Protocol5Proof
+    signs: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -88,6 +109,31 @@ def verify_transaction(
     p1_params: RingProtocol1Parameters,
     p5: Protocol5Parameters,
 ) -> TransactionVerification:
+    """Compatibility adapter for PRIVATE research results, not a wire API.
+
+    New callers must export PublicTransactionProof and use
+    verify_public_transaction. This adapter retains consistency checks for
+    experiment metadata so existing adversarial research remains meaningful.
+    """
+    public = tuple(tuple(row) for row in bit_commitments)
+    sign_tuple = tuple(signs)
+    if (conservation.bit_commitments != public
+            or sign_tuple != tuple(conservation.lambdas)):
+        return TransactionVerification(False, len(binary_proofs), (), False,
+                                       (False,) * 4, False, False)
+    return verify_public_transaction(
+        statement=statement, key=key,
+        proof=PublicTransactionProof(bit_width, public,
+            tuple(result.proof for result in binary_proofs),
+            conservation.proof, sign_tuple),
+        p1_params=p1_params, p5=p5,
+    )
+
+
+def verify_public_transaction(
+    *, statement: bytes, key: HMCKey, proof: PublicTransactionProof,
+    p1_params: RingProtocol1Parameters, p5: Protocol5Parameters,
+) -> TransactionVerification:
     """Independently verify a composed transaction from PUBLIC data only.
 
     This is the witness-free counterpart to prove_transaction. It must be
@@ -105,9 +151,10 @@ def verify_transaction(
       4. the conservation proof must commit to exactly these commitments, so
          the two halves cannot prove facts about different values.
     """
-    public = tuple(tuple(row) for row in bit_commitments)
-    proofs = tuple(binary_proofs)
-    sign_tuple = tuple(int(value) for value in signs)
+    public = proof.bit_commitments
+    proofs = proof.binary_proofs
+    sign_tuple = proof.signs
+    bit_width = proof.bit_width
 
     dimensions_ok = (
         bool(public)
@@ -117,17 +164,16 @@ def verify_transaction(
         and bit_width == key.message_width
         and bit_width == p5.k
     )
-    signs_consistent = sign_tuple == tuple(conservation.lambdas)
-    shared = conservation.bit_commitments == public
+    signs_consistent = all(type(value) is int and value in (-1, 1) for value in sign_tuple)
 
     binary_failures: list[int] = []
     if dimensions_ok:
-        for index, result in enumerate(proofs):
+        for index, binary_proof in enumerate(proofs):
             if not verify_protocol1_ring(
                 statement + b"|amount|" + index.to_bytes(4, "big"),
                 key, key, key, key,
                 (public[index],),
-                result.proof,
+                binary_proof,
                 p1_params,
             ):
                 binary_failures.append(index)
@@ -137,12 +183,12 @@ def verify_transaction(
 
     gates: tuple[bool, bool, bool, bool] = (False, False, False, False)
     conservation_ok = False
-    if dimensions_ok and signs_consistent and shared:
+    if dimensions_ok and signs_consistent:
         try:
             p5_verification = verify_linear_equation(
                 statement=statement + b"|conservation", key_c=key,
                 bit_commitments=public, lambdas=sign_tuple,
-                proof=conservation.proof, p5=p5,
+                proof=proof.conservation, p5=p5,
             )
             gates = (
                 p5_verification.f0_in_range,
@@ -179,6 +225,7 @@ def prove_transaction(
     phi3: Decimal,
     p1_max_attempts: int = 512,
     p5_max_attempts: int = 512,
+    openings_override: Sequence[Sequence[RingElement]] | None = None,
 ) -> TransactionProof:
     """Prove one transaction: bits binary (P1 per amount) + conserved (P5).
 
@@ -221,7 +268,9 @@ def prove_transaction(
                 params, p5.m, p5.B,
             )
             for index in range(len(signed))
-        )
+        ) if openings_override is None else tuple(tuple(row) for row in openings_override)
+        if len(openings) != len(signed):
+            raise TransactionProofError("opening count differs from amounts")
         bits_rows = tuple(
             tuple(
                 _constant_poly(bit, params)
@@ -303,10 +352,12 @@ def prove_transaction(
 
 
 __all__ = [
+    "PublicTransactionProof",
     "TransactionProof",
     "TransactionProofError",
     "TransactionVerification",
     "prove_transaction",
     "verify_transaction",
+    "verify_public_transaction",
 ]
 

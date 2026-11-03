@@ -1,5 +1,11 @@
 # Real testnet scope: pq-ct-research + Obscura
 
+**Historical planning/status notes below.** For the current executable boundary,
+read [Transaction boundaries V2](TRANSACTION_BOUNDARIES_V2.md). The old 477-byte
+payload excluded proof transcripts and signatures; it is not a complete
+transaction size. The current tool is an in-memory simulator, with no mining
+or network. Older contradictory completion statements below are not release gates.
+
 STATUS: planning document only. No code, no deployment, no consensus
 changes. This exists to make the distance from "toy research lab" to
 "real experimental testnet" concrete and honest, per the user's explicit

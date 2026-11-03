@@ -59,6 +59,14 @@ The PQ-CT work must therefore begin as an independent reference implementation. 
 
 ## Run the tests
 
+The current in-memory transaction boundary has a complete public-only V2
+codec, node-pinned verifier policy, note/proof commitment linkage and atomic
+simulator transitions. See [Transaction boundaries V2](docs/TRANSACTION_BOUNDARIES_V2.md)
+for the exact scope and breaking transcript change. Private experiment results
+still contain witnesses and must never be sent or logged as public proofs.
+The composed proof algorithms remain unproven; these implementation checks do
+not establish soundness, privacy or a secure parameter set.
+
 From Git Bash:
 
 ```bash

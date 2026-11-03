@@ -22,6 +22,7 @@ from pqct.protocol5 import protocol5_params_for_lambdas
 from pqct.ring_commitment import ToyParameters
 from pqct.transaction_proof import prove_transaction
 from pqct.tx_envelope import TransactionEnvelope
+from pqct.public_transaction import PublicTransaction, VerifierConfig, transaction_statement
 
 
 class NodeTestBase(unittest.TestCase):
@@ -43,7 +44,8 @@ class NodeTestBase(unittest.TestCase):
             self.signs, p=2, w=4, k=self.k, B=1, m=self.m, d=8,
             phi2=Decimal("4"), phi3=Decimal("4"),
         )
-        self.node = ExperimentalNode(chain_id=self.chain)
+        self.config = VerifierConfig(self.key, self.p1, self.p5, self.signs, allow_proof_only=True)
+        self.node = ExperimentalNode(chain_id=self.chain, verifier=self.config)
 
     def build_tx(self, *, nonce, state_root=None, chain_id=None, expiry=1000,
                  seed=b"node-seed"):
@@ -53,9 +55,7 @@ class NodeTestBase(unittest.TestCase):
             nonce=nonce,
             expiry_height=expiry,
         )
-        statement = envelope.statement(
-            bit_width=self.k, account_count=len(self.amounts)
-        )
+        statement = transaction_statement(self.config, envelope)
         proof = prove_transaction(
             seed=seed, statement=statement, key=self.key,
             amounts=self.amounts, bit_width=self.k,
@@ -64,15 +64,12 @@ class NodeTestBase(unittest.TestCase):
         )
         return envelope, proof
 
-    def submit(self, envelope, proof, payload=b"payload"):
-        return self.node.submit(
-            envelope=envelope, payload=payload, key=self.key,
-            bit_commitments=proof.bit_commitments,
-            binary_proofs=proof.binary_proofs,
-            conservation=proof.conservation,
-            signs=self.signs, bit_width=self.k,
-            p1_params=self.p1, p5=self.p5,
-        )
+    def payload(self, envelope, proof):
+        return PublicTransaction(self.config.profile_id, envelope,
+                                 proof.public_proof(), proof_only=True).encode(self.config)
+
+    def submit(self, envelope, proof):
+        return self.node.submit(self.payload(envelope, proof))
 
 
 class NodeAcceptanceTests(NodeTestBase):
@@ -86,7 +83,7 @@ class NodeAcceptanceTests(NodeTestBase):
 
     def test_rejects_empty_chain_id(self):
         with self.assertRaises(NodeError):
-            ExperimentalNode(chain_id=b"")
+            ExperimentalNode(chain_id=b"", verifier=self.config)
 
     def test_honest_transaction_is_accepted(self):
         envelope, proof = self.build_tx(nonce=1)

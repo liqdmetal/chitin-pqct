@@ -72,7 +72,7 @@ class Keypair:
     """An ML-DSA-65 keypair. `secret` never leaves the owner."""
 
     public: bytes
-    secret: bytes
+    secret: bytes = field(repr=False)
 
     def __post_init__(self) -> None:
         if len(self.public) != PUBLIC_KEY_SIZE:
@@ -144,8 +144,8 @@ class Note:
             raise AuthorizationError("note commitment must not be empty")
         if len(self.owner) != PUBLIC_KEY_SIZE:
             raise AuthorizationError("note owner must be an ML-DSA-65 public key")
-        if self.index < 0:
-            raise AuthorizationError("note index must be non-negative")
+        if type(self.index) is not int or not 0 <= self.index < 2**32:
+            raise AuthorizationError("note index must be uint32")
 
     @property
     def note_id(self) -> bytes:
@@ -280,11 +280,14 @@ class NoteRegistry:
         return True, "authorized"
 
     def apply_spend(self, *, spent_note_ids, created_notes) -> None:
-        """Consume inputs and create outputs. Call only after authorize_spend."""
-        for note_id in tuple(spent_note_ids):
-            self.mark_spent(note_id)
-        for note in tuple(created_notes):
-            self.create(note)
+        """Atomically consume/create notes; authorization must already pass."""
+        spent_ids, created = tuple(spent_note_ids), tuple(created_notes)
+        pending = NoteRegistry(dict(self.unspent), set(self.spent))
+        for note_id in spent_ids:
+            pending.mark_spent(note_id)
+        for note in created:
+            pending.create(note)
+        self.unspent, self.spent = pending.unspent, pending.spent
 
     def summary(self) -> dict:
         return {

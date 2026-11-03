@@ -1,55 +1,40 @@
-"""Minimal experimental node: mempool, block assembly, chain state.
+"""Single-process, in-memory, valueless PQ-CT transaction experiment.
 
-This is the thinnest thing that can honestly be called a network node for
-Chitin transactions. It is a SINGLE-PROCESS, IN-MEMORY simulator: no p2p, no
-mining, no persistence, no consensus rules beyond "the proof verifies and the
-envelope is fresh". Its purpose is to exercise the crypto under
-transaction-shaped pressure -- replay, expiry, fork/state binding, duplicate
-nonces, malformed bytes -- which unit tests on proofs alone cannot reach.
-
-WHAT IT IS NOT: it is not a blockchain, not consensus, not connected to DERO
-or any real network, and it carries no value. Tokens here are integers in a
-Python dict.
-
-Acceptance pipeline for each transaction (all four must pass):
-  1. envelope well-formed and on THIS chain
-  2. not expired at the current height
-  3. nonce unused (replay guard)
-  4. witness-free proof verification against the ENVELOPE-DERIVED statement
-     -- so a proof for another chain/state/nonce cannot be accepted
-
-Deliberate design choice: the node derives the statement itself from the
-envelope. It never accepts a caller-supplied statement. This is the same
-lesson as the challenge-injection forgery -- anything the submitter chooses
-that feeds verification is an attack surface.
+Only complete canonical PUBLIC transactions enter admission. Policy is pinned
+by the node, notes are tied to the proved commitments, and rejected/pending
+transactions never mutate the committed note registry or replay markers.
+This remains unproven research cryptography, without networking or consensus.
 """
 
 from __future__ import annotations
 
 import hashlib
+import threading
 from dataclasses import dataclass, field
 
-from .authorization import AuthorizationError, NoteRegistry
-from .transaction_proof import verify_transaction
+from .authorization import Note, NoteRegistry, verify_signature
+from .public_transaction import (PublicTransaction, VerifierConfig, decode_transaction,
+                                 note_commitment, transaction_statement)
+from .transaction_proof import verify_public_transaction
 from .tx_envelope import ReplayGuard, TransactionEnvelope, compute_txid
 
-GENESIS_DOMAIN = b"CHITIN-GENESIS-V1"
-BLOCK_DOMAIN = b"CHITIN-BLOCK-V1"
+GENESIS_DOMAIN = b"CHITIN-GENESIS-V2"
+BLOCK_DOMAIN = b"CHITIN-BLOCK-V2"
 
 
 class NodeError(ValueError):
-    """Raised on node-level protocol violations."""
+    """Rejected experimental node transition."""
 
 
 @dataclass(frozen=True)
 class AcceptedTx:
-    """A transaction that passed every gate, with its verification evidence."""
-
     txid: bytes
     envelope: TransactionEnvelope
     account_count: int
     bit_width: int
     conservation_gates: tuple
+    transaction: PublicTransaction
+    payload: bytes
 
 
 @dataclass(frozen=True)
@@ -61,18 +46,11 @@ class Block:
 
 
 def genesis_state_root(chain_id: bytes) -> bytes:
-    hasher = hashlib.shake_256()
-    hasher.update(GENESIS_DOMAIN)
-    hasher.update(len(chain_id).to_bytes(2, "big"))
-    hasher.update(chain_id)
-    return hasher.digest(32)
+    return hashlib.shake_256(GENESIS_DOMAIN + len(chain_id).to_bytes(2, "big") + chain_id).digest(32)
 
 
 def next_state_root(prev: bytes, txids) -> bytes:
-    """Fold txids into the next state root, length-bound to avoid ambiguity."""
-    hasher = hashlib.shake_256()
-    hasher.update(BLOCK_DOMAIN)
-    hasher.update(prev)
+    hasher = hashlib.shake_256(BLOCK_DOMAIN + prev)
     items = tuple(txids)
     hasher.update(len(items).to_bytes(4, "big"))
     for txid in items:
@@ -81,153 +59,159 @@ def next_state_root(prev: bytes, txids) -> bytes:
     return hasher.digest(32)
 
 
+def _copy_registry(registry):
+    return NoteRegistry(dict(registry.unspent), set(registry.spent))
+
+
+def _apply(registry, transaction):
+    if not transaction.proof_only:
+        registry.apply_spend(spent_note_ids=transaction.spent_note_ids,
+                             created_notes=transaction.created_notes)
+
+
 @dataclass
 class ExperimentalNode:
-    """In-memory node for an isolated, valueless experimental network."""
-
     chain_id: bytes
-    height: int = 0
-    state_root: bytes = b""
-    mempool: list = field(default_factory=list)
-    blocks: list = field(default_factory=list)
-    guard: ReplayGuard = None
-    registry: NoteRegistry = None
-    rejections: list = field(default_factory=list)
+    verifier: VerifierConfig
+    genesis_notes: tuple[Note, ...] = ()
+    height: int = field(default=0, init=False)
+    state_root: bytes = field(default=b"", init=False)
+    mempool: list = field(default_factory=list, init=False)
+    blocks: list = field(default_factory=list, init=False)
+    guard: ReplayGuard = field(init=False)
+    registry: NoteRegistry = field(init=False)
+    rejections: list = field(default_factory=list, init=False)
+    _lock: object = field(default_factory=threading.RLock, init=False, repr=False)
 
-    def __post_init__(self) -> None:
-        if not self.chain_id:
-            raise NodeError("chain_id required")
-        if not self.state_root:
-            self.state_root = genesis_state_root(self.chain_id)
-        if self.guard is None:
-            self.guard = ReplayGuard(chain_id=self.chain_id)
-        if self.registry is None:
-            self.registry = NoteRegistry()
+    def __post_init__(self):
+        if type(self.chain_id) is not bytes or not 1 <= len(self.chain_id) <= 64:
+            raise NodeError("chain_id must contain 1..64 bytes")
+        if type(self.verifier) is not VerifierConfig:
+            raise NodeError("node requires a pinned verifier configuration")
+        self.guard = ReplayGuard(chain_id=self.chain_id)
+        self.registry = NoteRegistry()
+        for note in self.genesis_notes:
+            # Genesis allocations are trusted operator input, but their encoding
+            # must be a valid commitment under this same profile.
+            from .wire_codec import _Reader, decode_vector
+            prefix = b"CHITIN-NOTE-COMMITMENT-V2" + self.verifier.profile_id
+            if not note.commitment.startswith(prefix):
+                raise NodeError("genesis note has another commitment profile")
+            reader = _Reader(note.commitment[len(prefix):])
+            row = decode_vector(reader, self.verifier.key.params)
+            reader.finish()
+            if note_commitment(self.verifier, row) != note.commitment:
+                raise NodeError("noncanonical genesis commitment")
+            self.registry.mint_genesis(note)
+        genesis_ids = tuple(sorted(self.registry.unspent))
+        self.state_root = next_state_root(
+            genesis_state_root(self.chain_id), (self.verifier.profile_id,) + genesis_ids)
 
-    def submit(
-        self, *, envelope, payload, key, bit_commitments, binary_proofs,
-        conservation, signs, bit_width, p1_params, p5,
-        spent_note_ids=None, created_notes=None, signatures=None,
-    ) -> tuple[bool, str]:
-        """Run the full acceptance pipeline. Returns (accepted, reason).
-
-        Gates, in order: chain/expiry/replay -> state freshness -> proof
-        verification -> AUTHORIZATION (provenance, ownership, double-spend).
-
-        Authorization is last because it is the most expensive, but it is
-        NOT optional: without it a transaction with fabricated inputs
-        passes every other gate, since conserving 1,000,000 in and
-        1,000,000 out is arithmetically valid. Passing `spent_note_ids=None`
-        runs the node in NO-VALUE mode (proof plumbing only) and is
-        reported as such, so it can never be mistaken for an authorized
-        transfer.
-        """
-        # Gate 1-3: envelope, chain, expiry, replay.
-        ok, reason = self.guard.check_and_record(envelope, self.height)
-        if not ok:
-            self.rejections.append(reason)
-            return False, reason
-
-        # Gate 3b: the tx must be built on THIS node's current state root.
-        if envelope.prev_state_root != self.state_root:
-            reason = (
-                f"stale state: envelope built on {envelope.prev_state_root.hex()[:16]} "
-                f"but node is at {self.state_root.hex()[:16]}"
-            )
-            self.rejections.append(reason)
-            return False, reason
-
-        # Gate 4: the node DERIVES the statement; it never trusts a caller's.
-        statement = envelope.statement(
-            bit_width=bit_width, account_count=len(tuple(signs))
-        )
-        verification = verify_transaction(
-            statement=statement, key=key,
-            bit_commitments=bit_commitments, binary_proofs=binary_proofs,
-            conservation=conservation, signs=signs, bit_width=bit_width,
-            p1_params=p1_params, p5=p5,
-        )
-        if not verification.accepted:
-            reason = (
-                f"proof rejected (dims={verification.dimensions_ok}, "
-                f"signs={verification.signs_consistent}, "
-                f"binary={verification.binary_ok}, "
-                f"conservation={verification.conservation_ok})"
-            )
-            self.rejections.append(reason)
-            return False, reason
-
+    def _verify(self, payload, registry, seen, height):
+        transaction = decode_transaction(payload, self.verifier)
+        envelope, proof = transaction.envelope, transaction.proof
         txid = compute_txid(payload)
+        if envelope.chain_id != self.chain_id:
+            raise NodeError("wrong chain")
+        if envelope.is_expired(height):
+            raise NodeError("expired transaction")
+        if (self.chain_id, txid) in seen:
+            raise NodeError("replay: transaction already accepted")
+        if envelope.prev_state_root != self.state_root:
+            raise NodeError("stale state root")
+        if not transaction.proof_only:
+            inputs, outputs = transaction.spent_note_ids, transaction.created_notes
+            if len(set(inputs)) != len(inputs):
+                raise NodeError("duplicate input note")
+            output_ids = tuple(note.note_id for note in outputs)
+            if len(set(output_ids)) != len(output_ids):
+                raise NodeError("duplicate output note")
+            message = transaction.authorization_payload(self.verifier)
+            for note_id, position, signature in zip(
+                    inputs, self.verifier.input_positions, transaction.signatures):
+                note = registry.get_unspent(note_id)
+                if note.commitment != note_commitment(self.verifier, proof.bit_commitments[position]):
+                    raise NodeError("input note is not the commitment proved by this transaction")
+                if not verify_signature(note.owner, message, signature):
+                    raise NodeError("input not authorized by its owner")
+            for note, position in zip(outputs, self.verifier.output_positions):
+                if note.commitment != note_commitment(self.verifier, proof.bit_commitments[position]):
+                    raise NodeError("output note is not the commitment proved by this transaction")
+                if note.note_id in registry.unspent or note.note_id in registry.spent:
+                    raise NodeError("output note already exists")
+        verification = verify_public_transaction(
+            statement=transaction_statement(self.verifier, envelope), key=self.verifier.key,
+            proof=proof, p1_params=self.verifier.p1, p5=self.verifier.p5)
+        if not verification.accepted:
+            raise NodeError("proof rejected")
+        return AcceptedTx(txid, envelope, len(proof.signs), proof.bit_width,
+                          verification.conservation_gates, transaction, payload)
 
-        # Gate 5: AUTHORIZATION -- provenance, ownership, no double-spend.
-        value_mode = spent_note_ids is not None
-        if value_mode:
-            authorized, auth_reason = self.registry.authorize_spend(
-                statement=statement,
-                spent_note_ids=spent_note_ids,
-                created_notes=created_notes or (),
-                signatures=signatures or (),
-            )
-            if not authorized:
-                reason = f"unauthorized: {auth_reason}"
-                self.rejections.append(reason)
-                return False, reason
+    def _pending_state(self):
+        registry, seen = _copy_registry(self.registry), set(self.guard.seen)
+        for pending in self.mempool:
+            _apply(registry, pending.transaction)
+            seen.add((self.chain_id, pending.txid))
+        return registry, seen
+
+    def validate(self, payload: bytes) -> tuple[bool, str]:
+        """Read-only admission check, including current mempool reservations."""
+        with self._lock:
             try:
-                self.registry.apply_spend(
-                    spent_note_ids=spent_note_ids,
-                    created_notes=created_notes or (),
-                )
-            except AuthorizationError as error:
-                reason = f"spend application failed: {error}"
-                self.rejections.append(reason)
-                return False, reason
+                registry, seen = self._pending_state()
+                self._verify(payload, registry, seen, self.height)
+                return True, "valid"
+            except (ValueError, TypeError, OverflowError, AttributeError) as error:
+                return False, str(error)
 
-        self.mempool.append(AcceptedTx(
-            txid=txid, envelope=envelope, account_count=len(tuple(signs)),
-            bit_width=bit_width,
-            conservation_gates=verification.conservation_gates,
-        ))
-        mode = "authorized" if value_mode else "NO-VALUE (proof only)"
-        return True, f"accepted txid={txid.hex()[:16]} [{mode}]"
+    def submit(self, payload: bytes) -> tuple[bool, str]:
+        """Decode/verify complete bytes and reserve a pending transition only."""
+        with self._lock:
+            try:
+                registry, seen = self._pending_state()
+                accepted = self._verify(payload, registry, seen, self.height)
+            except (ValueError, TypeError, OverflowError, AttributeError) as error:
+                self.rejections.append(str(error))
+                return False, str(error)
+            self.mempool.append(accepted)
+            mode = "NO-VALUE (proof only)" if accepted.transaction.proof_only else "authorized"
+            return True, f"accepted txid={accepted.txid.hex()[:16]} [{mode}]"
+
+    def evict(self, txid: bytes) -> None:
+        """Drop pending work; no committed replay or note state needs undoing."""
+        with self._lock:
+            # Later pending transfers may depend on an output being evicted.
+            # Clear the suffix so reservations remain a valid transition chain.
+            for index, pending in enumerate(self.mempool):
+                if pending.txid == txid:
+                    del self.mempool[index:]
+                    return
 
     def seal_block(self) -> Block:
-        """Advance the chain by one block over the current mempool."""
-        txids = tuple(tx.txid for tx in self.mempool)
-        new_root = next_state_root(self.state_root, txids)
-        block = Block(
-            height=self.height + 1,
-            prev_state_root=self.state_root,
-            state_root=new_root,
-            txids=txids,
-        )
-        self.blocks.append(block)
-        self.height = block.height
-        self.state_root = new_root
-        self.mempool = []
-        return block
+        """Revalidate and atomically publish notes, replay markers and block."""
+        with self._lock:
+            registry, seen = _copy_registry(self.registry), set(self.guard.seen)
+            for pending in self.mempool:
+                accepted = self._verify(pending.payload, registry, seen, self.height + 1)
+                _apply(registry, accepted.transaction)
+                seen.add((self.chain_id, accepted.txid))
+            txids = tuple(tx.txid for tx in self.mempool)
+            block = Block(self.height + 1, self.state_root,
+                          next_state_root(self.state_root, txids), txids)
+            self.registry = registry
+            self.guard.seen = seen
+            self.blocks.append(block)
+            self.height, self.state_root = block.height, block.state_root
+            self.mempool = []
+            return block
 
     def summary(self) -> dict:
-        return {
-            "chain_id": self.chain_id.decode("ascii", "replace"),
-            "height": self.height,
-            "state_root": self.state_root.hex(),
-            "blocks": len(self.blocks),
-            "mempool": len(self.mempool),
-            "total_txs": sum(len(b.txids) for b in self.blocks),
-            "rejections": len(self.rejections),
-            "unspent_notes": len(self.registry.unspent),
-            "spent_notes": len(self.registry.spent),
-            "status": "EXPERIMENTAL -- valueless, unproven crypto, not consensus",
-        }
-
-
-__all__ = [
-    "AcceptedTx",
-    "BLOCK_DOMAIN",
-    "Block",
-    "ExperimentalNode",
-    "GENESIS_DOMAIN",
-    "NodeError",
-    "genesis_state_root",
-    "next_state_root",
-]
+        with self._lock:
+            return {"chain_id": self.chain_id.decode("ascii", "replace"),
+                    "height": self.height, "state_root": self.state_root.hex(),
+                    "blocks": len(self.blocks), "mempool": len(self.mempool),
+                    "total_txs": sum(len(b.txids) for b in self.blocks),
+                    "rejections": len(self.rejections),
+                    "unspent_notes": len(self.registry.unspent),
+                    "spent_notes": len(self.registry.spent),
+                    "status": "EXPERIMENTAL -- valueless, unproven crypto, not consensus"}

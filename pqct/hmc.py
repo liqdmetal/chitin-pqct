@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 from .ring_commitment import EncodingError, RingElement, ToyParameters
+from .encoding import ring_parameters, uint
 
 
 class HMCError(ValueError):
@@ -119,12 +120,11 @@ class HMCKey:
     def encode(self) -> bytes:
         width = (self.params.q.bit_length() + 7) // 8
         header = (
-            b"PQCT-HMC-V1"
-            + self.params.n.to_bytes(2, "big")
-            + self.params.q.to_bytes(4, "big")
-            + self.ring_rows.to_bytes(2, "big")
-            + self.randomness_width.to_bytes(2, "big")
-            + self.message_width.to_bytes(2, "big")
+            b"PQCT-HMC-V2"
+            + ring_parameters(self.params.n, self.params.q, self.params.k)
+            + uint(self.ring_rows, 4)
+            + uint(self.randomness_width, 4)
+            + uint(self.message_width, 4)
         )
         return header + b"".join(
             element.coeffs[index].to_bytes(width, "big")

@@ -88,7 +88,10 @@ class RingElement:
 
     def encode(self) -> bytes:
         width = (self.params.q.bit_length() + 7) // 8
-        header = self.params.n.to_bytes(2, "big") + self.params.q.to_bytes(4, "big")
+        from .encoding import ring_parameters
+        header = b"PQCT-RING-V2" + ring_parameters(
+            self.params.n, self.params.q, self.params.k
+        )
         return header + b"".join(c.to_bytes(width, "big") for c in self.coeffs)
 
     def _same_params(self, other: "RingElement") -> None:

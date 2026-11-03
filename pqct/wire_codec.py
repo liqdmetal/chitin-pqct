@@ -15,9 +15,9 @@ Design rules
    element and the txid becomes malleable.
 2. EXPLICIT: every variable-length run is length-prefixed. No trailing-data
    tolerance: leftover bytes are an error.
-3. SELF-DESCRIBING PARAMS: n and q ride in the header at full width (q as a
-   length-prefixed big-endian integer, NOT the 4 bytes that
-   RingElement.encode uses -- that overflows for the paper's q = 2^49).
+3. SELF-DESCRIBING PARAMS: n and q ride in the header at full width. The
+   bounded, minimal integer encoding is shared with the V2 ring and HMC
+   transcripts, including moduli wider than 32 bits.
 4. VERSIONED + DOMAIN-SEPARATED: the magic string carries a version and the
    word EXPERIMENTAL, so these bytes can never be confused with a production
    format.
@@ -32,6 +32,7 @@ from dataclasses import dataclass
 
 from .hmc import HMCError
 from .ring_commitment import RingElement, ToyParameters
+from .encoding import bigint, ring_parameters, uint, MAX_MODULUS_BITS
 
 MAGIC = b"CHITIN-TX-EXPERIMENTAL-V1"
 
@@ -45,24 +46,18 @@ def _coeff_width(q: int) -> int:
 
 
 def _put_uint(value: int, width: int) -> bytes:
-    if value < 0:
-        raise CodecError("negative value in unsigned field")
     try:
-        return int(value).to_bytes(width, "big")
-    except OverflowError as error:
-        raise CodecError(f"value {value} exceeds {width}-byte field") from error
+        return uint(value, width)
+    except ValueError as error:
+        raise CodecError(str(error)) from error
 
 
 def _put_bigint(value: int) -> bytes:
     """Length-prefixed big-endian integer (no 4-byte q limit)."""
-    if value < 0:
-        raise CodecError("negative bigint")
-    if value == 0:
-        return b"\x00"
-    raw = value.to_bytes((value.bit_length() + 7) // 8, "big")
-    if len(raw) > 255:
-        raise CodecError("bigint too large")
-    return bytes((len(raw),)) + raw
+    try:
+        return bigint(value)
+    except ValueError as error:
+        raise CodecError(str(error)) from error
 
 
 class _Reader:
@@ -89,7 +84,12 @@ class _Reader:
         length = self.uint(1)
         if length == 0:
             return 0
-        return int.from_bytes(self.take(length), "big")
+        if length > MAX_MODULUS_BITS // 8:
+            raise CodecError("bigint exceeds bounded encoding")
+        raw = self.take(length)
+        if raw[0] == 0:
+            raise CodecError("noncanonical bigint leading zero")
+        return int.from_bytes(raw, "big")
 
     def finish(self) -> None:
         if self.pos != len(self.data):
@@ -99,7 +99,10 @@ class _Reader:
 
 
 def encode_params(params: ToyParameters) -> bytes:
-    return _put_uint(params.n, 4) + _put_bigint(params.q) + _put_uint(params.k, 4)
+    try:
+        return ring_parameters(params.n, params.q, params.k)
+    except ValueError as error:
+        raise CodecError(str(error)) from error
 
 
 def decode_params(reader: _Reader) -> ToyParameters:
@@ -108,7 +111,11 @@ def decode_params(reader: _Reader) -> ToyParameters:
     k = reader.uint(4)
     if n <= 0 or q <= 1 or k <= 0:
         raise CodecError("invalid ring parameters")
-    return ToyParameters(n=n, q=q, k=k)
+    try:
+        ring_parameters(n, q, k)
+        return ToyParameters(n=n, q=q, k=k)
+    except ValueError as error:
+        raise CodecError(str(error)) from error
 
 
 def encode_element(element: RingElement) -> bytes:
