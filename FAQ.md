@@ -22,11 +22,13 @@ DERO-compatible account mode. It must not be wired into consensus until
 construction, proof system, parameters, implementation, and external
 review are complete.
 
-**How does this relate to chitin-pow?**
-`chitin-pow` (repo `liqdmetal/pq-mining`) is the proof-of-work track
-(bounded-weight syndrome decoding — what seals blocks). This repo is the
-confidential-transactions track (what could hide amounts). Both are
-research-only; the chain-side integration of either is out-of-band.
+**How does this relate to Chitin-PQ proof of work?**
+`pq-mining` (repo `liqdmetal/pq-mining`) is the Chitin-PQ proof-of-work
+track (bounded-weight syndrome decoding) with a research integration in
+Noumenon. This repository is the separate confidential-transactions research
+track; it is not live chain confidentiality. Its V2 codecs, verifier policy,
+signature checks and atomic simulator exercise interfaces only and do not
+establish soundness, privacy or production security.
 
 **What's the next milestone?**
 Formal statement of hiding/binding assumptions and security games, then a

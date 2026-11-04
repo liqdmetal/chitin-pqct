@@ -2,23 +2,24 @@
 
 **Chitin** is the working name for this construction: chitin is the polymer
 mycelial cell walls are made of — the rigid structure that makes the organism
-hard to break. Name verified clear of existing crypto/PQ projects (only the
-biopolymer uses it).
+hard to break. This is a project name, not a cryptographic security claim.
 
 ## Lineage
 
 This repository is the **confidential-transactions research track** of the
 Chitin family (lattice-based commitments). The separate **proof-of-work
 track** (bounded-weight syndrome decoding, golden vectors, attack audits)
-lives in [`chitin-pow`](https://github.com/liqdmetal/pq-mining). The
-chain-side integration of either track is maintained out-of-band; both
-repositories are research-only until independently reviewed.
+lives in [`pq-mining`](https://github.com/liqdmetal/pq-mining) and has a
+research integration in [Noumenon](https://github.com/liqdmetal/Noumenon). This repository
+remains a separate PQ-CT research lab; it is not integrated as live chain
+confidentiality.
 
-Post-quantum *resistant* confidential-account transaction research for a future DERO-compatible account mode.
+Post-quantum confidential-transaction research for a possible future account
+mode; this repository has no DERO or live-chain integration.
 
 **Status: research prototype only.** Nothing here is consensus-safe, production cryptography, or a claim of absolute quantum-proofness. Several real attacks were found and fixed during development (see docs/HARD_BLOCKER_PROGRESS.md); the soundness, SHVZK and Fiat–Shamir *proofs* are still absent, and no certified bit-security level exists.
 
-## First milestone
+## Current implementation
 
 This repository establishes a clean reference model for a module-lattice-style additive commitment:
 
@@ -39,12 +40,19 @@ It currently provides:
 It does **not** provide:
 
 - a secure parameter set;
-- a range proof;
-- a balance-conservation proof;
+- a range-proof construction with established soundness;
+- a balance-conservation proof with established security;
 - a secure encryption scheme;
 - a wallet format;
 - a consensus implementation;
 - a claim that the construction is binding, hiding, or post-quantum secure.
+
+The repository also contains experimental V2 proof and transaction-boundary
+work: public-only proof codecs, verifier policy, note/proof commitment links,
+authorization signatures, and atomic single-process simulator transitions.
+These are implementation experiments, not completed cryptographic proofs or
+production transaction functionality. Soundness, SHVZK, Fiat–Shamir security,
+secure parameters, and independent review remain unresolved.
 
 ## Why this is separate from derohe
 
