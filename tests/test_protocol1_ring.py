@@ -1,6 +1,8 @@
 import unittest
+from decimal import Decimal, localcontext
 
 from pqct.binary_protocol1_ring import (
+    RingProtocol1Error,
     RingProtocol1Parameters,
     prove_protocol1_ring,
     verify_protocol1_ring,
@@ -77,6 +79,96 @@ class RingProtocol1Tests(unittest.TestCase):
             b"ring-protocol1", self.base, self.e, self.f, self.g,
             self.commitments, mutated, self.proof_params,
         ))
+
+
+class RingProtocol1BoundPolicyTests(unittest.TestCase):
+    """Verifier-policy bounds are local config: malformed must fail predictably.
+
+    An infinite bound silently defeats its own norm cap, and a NaN reaches the
+    decimal comparison as InvalidOperation instead of a domain error. Both are
+    configuration faults, so they must raise RingProtocol1Error.
+    """
+
+    BASE = dict(
+        challenge_weight=1,
+        challenge_coefficient_bound=1,
+        g_bound=1,
+        zg_bound=1,
+        zb_bound=1,
+    )
+
+    def _build(self, **overrides):
+        arguments = dict(self.BASE)
+        arguments.update(overrides)
+        return RingProtocol1Parameters(**arguments)
+
+    def test_non_finite_bounds_are_rejected(self):
+        for field in ("g_bound", "zg_bound", "zb_bound"):
+            for value in (
+                Decimal("Infinity"),
+                Decimal("-Infinity"),
+                Decimal("NaN"),
+                Decimal("sNaN"),
+            ):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(RingProtocol1Error):
+                        self._build(**{field: value})
+
+    def test_zero_negative_and_unconvertible_bounds_are_rejected(self):
+        bad_values = (0, -1, Decimal(0), Decimal("-2.5"), None, "not-a-number")
+        for field in ("g_bound", "zg_bound", "zb_bound"):
+            for value in bad_values:
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(RingProtocol1Error):
+                        self._build(**{field: value})
+
+    def test_finite_positive_bounds_are_accepted(self):
+        params = self._build(g_bound=1000, zg_bound=Decimal("1500.5"),
+                             zb_bound=Decimal(2))
+        self.assertEqual(Decimal(params.g_bound), Decimal(1000))
+        self.assertEqual(Decimal(params.zg_bound), Decimal("1500.5"))
+        self.assertEqual(Decimal(params.zb_bound), Decimal(2))
+
+    def _paper(self, **overrides):
+        arguments = dict(
+            challenge_weight=3,
+            challenge_coefficient_bound=5,
+            B=2,
+            p=3,
+            k=1,
+            m=2,
+            d=2,
+            phi1=Decimal("1.5"),
+            phi2=Decimal("2.25"),
+        )
+        arguments.update(overrides)
+        return RingProtocol1Parameters.from_paper_bounds(**arguments)
+
+    def test_non_finite_phi_inputs_are_rejected_before_arithmetic(self):
+        for field in ("phi1", "phi2"):
+            for value in (Decimal("Infinity"), Decimal("-Infinity"),
+                          Decimal("NaN"), Decimal("sNaN")):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(RingProtocol1Error):
+                        self._paper(**{field: value})
+
+    def test_zero_negative_or_unconvertible_phi_inputs_are_rejected(self):
+        for field in ("phi1", "phi2"):
+            for value in (Decimal(0), Decimal("-1"), 0, -1, None, "x"):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(RingProtocol1Error):
+                        self._paper(**{field: value})
+
+    def test_finite_paper_bounds_are_unchanged(self):
+        # Captured from the unmodified 01d6a9d implementation at precision 28;
+        # pin compatibility without reproducing the formulas under test.
+        with localcontext() as context:
+            context.prec = 28
+            params = self._paper()
+        self.assertEqual(params.g_bound, Decimal("31.17691453623979128349403415"))
+        self.assertEqual(params.zg_bound, Decimal("561.1844616523162431028926146"))
+        self.assertEqual(params.zb_bound, Decimal("11223.68923304632486205785229"))
+        self.assertEqual(params.challenge_coefficient_bound, 5)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ finite-support distributions and rejection decisions are not a security proof.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 from typing import Sequence
 
 from .hmc import HMCError, HMCKey, centered_coefficients, infinity_norm
@@ -23,6 +23,28 @@ from .ring_commitment import EncodingError, RingElement
 
 class RingProtocol1Error(ValueError):
     """Malformed or dimensionally invalid ring Protocol 1 input."""
+
+
+def _finite_positive(value, name: str) -> Decimal:
+    """Convert a policy bound to Decimal, rejecting non-finite or non-positive.
+
+    These bounds are local verifier policy, not wire data: a NaN or an
+    Infinity reaching a norm cap comparison is a configuration fault, so it
+    must surface as RingProtocol1Error instead of an Infinity that never binds
+    or a decimal.InvalidOperation leaking out of the constructor. Decimal is
+    the documented numeric domain; anything it cannot convert fails here too.
+    """
+    try:
+        converted = Decimal(value)
+    except (DecimalException, TypeError, ValueError) as error:
+        raise RingProtocol1Error(f"{name} must be a finite positive number") from error
+    except ArithmeticError as error:  # Overflow on an extreme exponent
+        raise RingProtocol1Error(f"{name} must be a finite positive number") from error
+    if not converted.is_finite():
+        raise RingProtocol1Error(f"{name} must be finite")
+    if converted <= 0:
+        raise RingProtocol1Error(f"{name} must be positive")
+    return converted
 
 
 def _zero(params) -> RingElement:
@@ -175,8 +197,11 @@ class RingProtocol1Parameters:
     def __post_init__(self) -> None:
         if min(self.challenge_weight, self.challenge_coefficient_bound) <= 0:
             raise RingProtocol1Error("challenge parameters must be positive")
-        if min(Decimal(self.g_bound), Decimal(self.zg_bound), Decimal(self.zb_bound)) <= 0:
-            raise RingProtocol1Error("Protocol 1 bounds must be positive")
+        # Each bound is checked on its own after numeric conversion so an
+        # infinite bound cannot silently disable its own norm cap and a NaN
+        # cannot escape as InvalidOperation.
+        for name in ("g_bound", "zg_bound", "zb_bound"):
+            _finite_positive(getattr(self, name), name)
         if not 1 <= self.max_vectors <= 2:
             raise RingProtocol1Error("Gao Theorem 1 reference path supports S <= 2")
         if not self.challenge_domain or len(self.challenge_domain) > 220:
@@ -198,8 +223,12 @@ class RingProtocol1Parameters:
         max_vectors: int = 2,
     ) -> "RingProtocol1Parameters":
         """Build verifier bounds from Protocol 1's displayed formulas."""
-        if min(B, p, k, m, d) <= 0 or phi1 <= 0 or phi2 <= 0:
+        if min(B, p, k, m, d) <= 0:
             raise RingProtocol1Error("paper-bound inputs must be positive")
+        # phi1/phi2 scale every displayed bound, so a non-finite value must be
+        # rejected before the formula arithmetic rather than after it.
+        phi1 = _finite_positive(phi1, "phi1")
+        phi2 = _finite_positive(phi2, "phi2")
         t1 = Decimal(p) * Decimal(2 * challenge_weight * k).sqrt()
         t2 = Decimal(B * challenge_weight * p) * Decimal(3 * m * d).sqrt()
         g_bound = Decimal(2) * phi1 * t1 * Decimal(d).sqrt()
